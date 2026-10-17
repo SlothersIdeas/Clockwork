@@ -57,11 +57,7 @@ class GimbalBearingBlock(properties: Properties) : BearingBlock(properties), IBE
     override fun getBlockEntityType(): BlockEntityType<out GimbalBearingBlockEntity> = ClockworkBlockEntities.GIMBAL_BEARING.get()
     override fun getRotationAxis(state: BlockState): Direction.Axis = state.getValue(FACING).axis
 
-    override fun getShape(state: BlockState, worldIn: BlockGetter, pos: BlockPos, context: CollisionContext): VoxelShape {
-        return AllShapes.MECHANICAL_PISTON[state.getValue(FACING)]
-    }
-
     override fun hasShaftTowards(world: LevelReader, pos: BlockPos, state: BlockState, face: Direction): Boolean {
-        return face == state.getValue(FACING).opposite
+        return face.axis == state.getValue(FACING).axis
     }
 }

@@ -8,6 +8,8 @@ import com.simibubi.create.content.contraptions.bearing.BearingBlock
 import com.simibubi.create.content.contraptions.bearing.IBearingBlockEntity
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity
 import com.simibubi.create.content.contraptions.DirectionalExtenderScrollOptionSlot
+import com.simibubi.create.content.kinetics.base.IRotate
+import com.simibubi.create.content.kinetics.base.KineticBlockEntity
 import com.simibubi.create.foundation.blockEntity.behaviour.BehaviourType
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour
 import com.simibubi.create.foundation.blockEntity.behaviour.ValueBoxTransform
@@ -188,6 +190,32 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         maxAngleBehaviour!!.value = DEFAULT_MAX_ANGLE_DEG
         behaviours.add(maxAngleBehaviour!!)
     }
+
+    //region Custom Propagation
+    override fun propagateRotationTo(
+        target: KineticBlockEntity, stateFrom: BlockState, stateTo: BlockState, diff: BlockPos,
+        connectedViaAxes: Boolean, connectedViaCogs: Boolean
+    ): Float {
+        println(target.blockPos)
+        if (joint == null || target.blockPos != Vector3d(bearingPosInSub).floor().toMinecraft()) return 0f
+
+        return 1f
+    }
+
+    override fun addPropagationLocations(
+        block: IRotate,
+        state: BlockState,
+        neighbours: MutableList<BlockPos>
+    ): List<BlockPos> {
+        if (joint != null) neighbours.add(Vector3d(bearingPosInSub).floor().toMinecraft())
+        println(neighbours)
+        return neighbours
+    }
+
+    override fun isCustomConnection(other: KineticBlockEntity?, state: BlockState?, otherState: BlockState?): Boolean {
+        return true
+    }
+    //endregion
 
     private fun onMaxAngleChanged() {
         if (level == null || level!!.isClientSide) return
@@ -554,6 +582,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         tryMakeJoint()
         sendData()
         updateGeneratedRotation()
+        attachKinetics()
     }
 
     private fun tryMakeJoint() {
@@ -665,6 +694,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         removeTrackedJoint(level)
         lastStateChanged = ticks
         resetState()
+        detachKinetics()
     }
 
     private fun resetState() {
@@ -682,10 +712,13 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     }
 
     override fun destroy() {
+        // remove kinetic propagation
+        remove()
         super.destroy()
         val level = level ?: return
         if (level.isClientSide || level !is ServerLevel) return
         removeTrackedJoint(level)
+        resetState()
     }
 
     override fun physTick(physShip: PhysShip?, physLevel: PhysLevel) {

@@ -29,10 +29,6 @@ class UniversalShaftBlockEntity(typeIn: BlockEntityType<*>?, pos: BlockPos?, sta
     override val maxCreationDistance: Double
         get() = ClockworkConfig.SERVER.maxUniversalJointDistance
 
-    override fun onSpeedChanged(previousSpeed: Float) {
-        super.onSpeedChanged(previousSpeed)
-    }
-
     // Custom Propagation
     override fun propagateRotationTo(
         target: KineticBlockEntity, stateFrom: BlockState, stateTo: BlockState, diff: BlockPos,
