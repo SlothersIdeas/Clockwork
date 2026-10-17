@@ -56,7 +56,13 @@ repositories {
                 includeGroup("com.simibubi.create")
             }
         }
-        maven { url = "https://jitpack.io/" }
+        maven {
+            url = "https://jitpack.io/"
+            content {
+                // Gradle kept trying here idk why
+                excludeGroupAndSubgroups("org.valkyrienskies")
+            }
+        }
 
         flatDir {
             dir("libs")
