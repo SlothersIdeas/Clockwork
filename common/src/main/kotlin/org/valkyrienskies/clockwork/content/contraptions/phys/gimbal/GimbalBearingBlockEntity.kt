@@ -28,17 +28,13 @@ import org.joml.Quaterniond
 import org.joml.Vector3d
 import org.joml.Vector3dc
 import org.valkyrienskies.clockwork.ClockworkConfig
-import org.valkyrienskies.clockwork.ClockworkMod
 import org.valkyrienskies.clockwork.ClockworkMod.MOD_ID
 import org.valkyrienskies.clockwork.content.contraptions.phys.bearing.PhysBearingAssembler
 import org.valkyrienskies.clockwork.util.ClockworkConstants
 import org.valkyrienskies.clockwork.util.ClockworkUtils.getVector3d
 import org.valkyrienskies.clockwork.util.GlueAssembler.collectGlued
-import org.valkyrienskies.clockwork.util.findMatchingJoint
 import org.valkyrienskies.clockwork.util.findMatchingJointIds
 import org.valkyrienskies.clockwork.util.gtpa
-import org.valkyrienskies.clockwork.util.hasFinitePoseData
-import org.valkyrienskies.clockwork.util.removeMatchingJointsExcept
 import org.valkyrienskies.clockwork.util.updateJoint
 import org.valkyrienskies.core.api.ships.PhysShip
 import org.valkyrienskies.core.api.world.PhysLevel
@@ -50,10 +46,8 @@ import org.valkyrienskies.core.internal.joints.VSD6Joint.D6Motion
 import org.valkyrienskies.core.internal.joints.VSJoint
 import org.valkyrienskies.core.internal.joints.VSJointPose
 import org.valkyrienskies.core.internal.joints.VSSphericalJoint
-import org.valkyrienskies.core.internal.world.VsiPhysLevel
 import org.valkyrienskies.core.util.datastructures.DenseBlockPosSet
 import org.valkyrienskies.mod.api.BlockEntityPhysicsListener
-import org.valkyrienskies.mod.api.dimensionId
 import org.valkyrienskies.mod.common.*
 import org.valkyrienskies.mod.common.assembly.ShipAssembler.assembleToShip
 import org.valkyrienskies.mod.common.assembly.VSAssemblyEvents
@@ -62,8 +56,10 @@ import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toJOMLD
 import org.valkyrienskies.mod.common.world.clipIncludeShips
 import org.valkyrienskies.core.api.attachment.getAttachment
+import org.valkyrienskies.core.api.ships.properties.ShipId
 import org.valkyrienskies.core.api.util.PhysTickOnly
 import org.valkyrienskies.kelvin.util.KelvinExtensions.toMinecraft
+import org.valkyrienskies.mod.api.getShipById
 import java.util.EnumMap
 import kotlin.math.abs
 import kotlin.math.min
@@ -80,7 +76,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     var isRunning = false
         private set
 
-    @Volatile var shiptraptionID: Long = NO_SHIPTRAPTION_ID
+    @Volatile var connectedShipId: ShipId = -1
         private set
 
     @Volatile var joint: VSJoint? = null
@@ -150,10 +146,6 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     private var ticks = 0
     private var lastStateChanged = 0
     private val cooldown = 20
-
-    private var pendingJointCreationToken: Long = 0L
-    private var restoreJointAfterLoad = false
-    private var deferredJointRestoreTries = 0
 
     private val facing: Direction
         get() = blockState.getValue(BlockStateProperties.FACING)
@@ -263,9 +255,13 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     override fun write(tag: CompoundTag, clientPacket: Boolean) {
         super.write(tag, clientPacket)
         tag.putBoolean(ClockworkConstants.Nbt.RUNNING, isRunning)
-        if (shiptraptionID != NO_SHIPTRAPTION_ID) {
-            tag.putLong(ClockworkConstants.Nbt.SHIPTRAPTION_ID, shiptraptionID)
-        }
+
+        tag.putLong("connectedShip", connectedShipId)
+
+        if (jointID != -1) tag.putInt("JointID", jointID)
+
+        tag.putVector3d("RedstoneVec", redstoneVecLocal)
+
         originalDirection?.let { tag.putInt(ClockworkConstants.Nbt.ORIGINAL_DIRECTION, it.ordinal) }
         AssemblyException.write(tag, lastException)
         tag.putInt("MaxAngleDeg", getMaxAngleDeg())
@@ -282,16 +278,19 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         tag.putDouble("AssyHostRotZ", assemblyHostRotation.z)
         tag.putDouble("AssyHostRotW", assemblyHostRotation.w)
 
-        if (jointID != -1) tag.putInt("JointID", jointID)
         writeGimbalDebug(tag)
     }
 
     override fun read(tag: CompoundTag, clientPacket: Boolean) {
         super.read(tag, clientPacket)
         isRunning = tag.getBoolean(ClockworkConstants.Nbt.RUNNING)
-        if (tag.contains(ClockworkConstants.Nbt.SHIPTRAPTION_ID)) {
-            shiptraptionID = tag.getLong(ClockworkConstants.Nbt.SHIPTRAPTION_ID)
+        if (tag.contains("connectedShip")) {
+            connectedShipId = tag.getLong("connectedShip")
         }
+        redstoneVecLocal = tag.getVector3d("RedstoneVec") ?: Vector3d()
+
+        if (tag.contains("JointID")) jointID = tag.getInt("JointID")
+
         if (tag.contains(ClockworkConstants.Nbt.ORIGINAL_DIRECTION)) {
             originalDirection = Direction.entries[tag.getInt(ClockworkConstants.Nbt.ORIGINAL_DIRECTION)]
         }
@@ -317,19 +316,9 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
                 tag.getDouble("AssyHostRotW")
             )
         }
-        if (tag.contains("JointID")) jointID = tag.getInt("JointID")
+
         readGimbalDebug(tag)
         lastJointMaxAngleDeg = getMaxAngleDeg()
-
-        if (!clientPacket && isRunning && shiptraptionID != NO_SHIPTRAPTION_ID) {
-            restoreJointAfterLoad = true
-            deferredJointRestoreTries = 0
-            joint = null
-            jointID = -1
-        } else if (!clientPacket) {
-            restoreJointAfterLoad = false
-            deferredJointRestoreTries = 0
-        }
     }
 
     private fun writeGimbalDebug(tag: CompoundTag) {
@@ -392,6 +381,26 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         super.tick()
         ticks++
         if (level == null || level!!.isClientSide) return
+        val level = level as ServerLevel
+
+        if (jointID != -1 && joint == null) {
+            joint = level.gtpa.getJointById(jointID)
+            if (joint == null) {
+                jointID = -1
+            }
+        }
+        if (jointID == -1 && joint != null) {
+            // Only try to make the joint if the other ship is loaded
+            // (we know our ship is loaded... because we're ticking)
+            if (level.shipObjectWorld.loadedShips.getById(connectedShipId) != null) {
+                joint!!.serialized()
+                level.gtpa.addJoint(joint!!) { id ->
+                    isRunning = true
+                    jointID = id
+                }
+            }
+        }
+
 
         tryRestoreJointAfterLoad()
         tryAssembleNextTick()
@@ -399,36 +408,13 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     }
 
     private fun tryRestoreJointAfterLoad() {
-        if (!restoreJointAfterLoad) return
         val serverLevel = level as? ServerLevel ?: return
-        if (!isRunning || shiptraptionID == NO_SHIPTRAPTION_ID) {
-            restoreJointAfterLoad = false
-            deferredJointRestoreTries = 0
-            return
-        }
-        if (joint != null) {
-            restoreJointAfterLoad = false
-            deferredJointRestoreTries = 0
-            return
-        }
-        if (!rebuildJointFromSavedState(serverLevel)) return
-        restoreJointAfterLoad = false
-        deferredJointRestoreTries = 0
+        if (jointID == -1 && joint == null && isRunning) remakeJoint(serverLevel)
     }
 
-    private fun rebuildJointFromSavedState(serverLevel: ServerLevel): Boolean {
-        if (serverLevel.shipObjectWorld.loadedShips.getById(shiptraptionID) == null) {
-            deferredJointRestoreTries++
-            if (deferredJointRestoreTries % 40 == 0) {
-                ClockworkMod.LOGGER.warn(
-                    "Deferring gimbal bearing joint restore at {} because ship {} is not loaded yet (attempt {}).",
-                    worldPosition,
-                    shiptraptionID,
-                    deferredJointRestoreTries
-                )
-            }
-            return false
-        }
+    private fun remakeJoint(serverLevel: ServerLevel) {
+        if (joint != null) return
+        if (serverLevel.shipObjectWorld.allShips.getById(connectedShipId) == null) return
 
         val direction = originalDirection ?: blockState.getValue(BearingBlock.FACING)
         if (bearingAxisLocal.lengthSquared() < 1e-12) {
@@ -441,7 +427,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         val shipRot = directionHingeRotation(direction)
 
         joint = VSD6Joint(
-            shipId0 = shiptraptionID,
+            shipId0 = connectedShipId,
             pose0 = VSJointPose(getSubJointAnchorLocal(), shipRot),
             shipId1 = serverLevel.getShipObjectManagingPos(worldPosition)?.id,
             pose1 = VSJointPose(getOwnerJointAnchorLocal(), shipRot),
@@ -449,10 +435,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
             motions = motions,
             swingLimit = VSD6Joint.LimitCone(limitRad, limitRad)
         )
-        jointID = -1
         lastJointMaxAngleDeg = maxAngle
-        tryMakeJoint()
-        return true
     }
 
     private fun createGimbalJointMotions(): EnumMap<VSD6Joint.D6Axis, D6Motion> {
@@ -504,7 +487,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
 
         val otherShip = level.getShipObjectManagingPos(otherPos.blockPos)
 
-        val (bearingPos, shiptraption) = if (otherShip == null) {
+        val (otherShipCenterPos, newOtherShip) = if (otherShip == null) {
             val selection: DenseBlockPosSet?
             try {
                 selection = collectGlued(level, attachPoint)
@@ -529,10 +512,10 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
             event.unregister()
 
             val newPos = Vector3d(ownerFaceAnchor).sub(centerPositions.first).add(centerPositions.second)
-            shiptraptionID = ship.id
+            connectedShipId = ship.id
             Pair(newPos, ship)
         } else {
-            shiptraptionID = otherShip.id
+            connectedShipId = otherShip.id
             val bp = Vector3d(
                 otherPos.blockPos.x.toDouble() + 0.5,
                 otherPos.blockPos.y.toDouble() + 0.5,
@@ -542,17 +525,17 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         }
 
         val shipOnID = shipOn?.id
-        val subJointAnchor = Vector3d(bearingPos).fma(-FACE_ATTACHMENT_OFFSET_BLOCKS, axis)
+        val subJointAnchor = Vector3d(otherShipCenterPos).fma(-FACE_ATTACHMENT_OFFSET_BLOCKS, axis)
 
         val posInWorld = shipOn?.transform?.shipToWorld?.transformPosition(
-            Vector3d(ownerJointAnchor).sub(subJointAnchor).add(shiptraption.inertiaData.centerOfMass), Vector3d()
-        ) ?: Vector3d(ownerJointAnchor).sub(subJointAnchor).add(shiptraption.inertiaData.centerOfMass)
+            Vector3d(ownerJointAnchor).sub(subJointAnchor).add(newOtherShip.inertiaData.centerOfMass), Vector3d()
+        ) ?: Vector3d(ownerJointAnchor).sub(subJointAnchor).add(newOtherShip.inertiaData.centerOfMass)
         val rotInWorld = shipOn?.transform?.shipToWorldRotation?.let { Quaterniond(it) } ?: Quaterniond()
         val scaling = shipOn?.transform?.shipToWorldScaling ?: Vector3d(1.0, 1.0, 1.0)
 
-        shiptraption.unsafeSetTransform(
+        newOtherShip.unsafeSetTransform(
             BodyTransformFactory.create(
-                posInWorld, rotInWorld, scaling, shiptraption.transform.positionInModel
+                posInWorld, rotInWorld, scaling, newOtherShip.transform.positionInModel
             )
         )
 
@@ -566,7 +549,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         val motions = createGimbalJointMotions()
 
         joint = VSD6Joint(
-            shipId0 = shiptraptionID,
+            shipId0 = connectedShipId,
             pose0 = pose0,
             shipId1 = shipOnID,
             pose1 = pose1,
@@ -575,65 +558,16 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
             swingLimit = VSD6Joint.LimitCone(limitRad,limitRad)
         )
         bearingAxisLocal = axis
-        bearingPosInSub = bearingPos
+        bearingPosInSub = otherShipCenterPos
         assemblyHostRotation = rotInWorld
         lastJointMaxAngleDeg = maxAngle
 
-        tryMakeJoint()
         sendData()
         updateGeneratedRotation()
         attachKinetics()
     }
 
-    private fun tryMakeJoint() {
-        val joint = joint ?: return
-        val creationToken = ++pendingJointCreationToken
-        if (!joint.hasFinitePoseData()) {
-            ClockworkMod.LOGGER.warn("Rejecting corrupted gimbal bearing joint at {}.", worldPosition)
-            this.joint = null
-            return
-        }
-
-        ClockworkMod.physTickOnce(level.dimensionId!!) { physLevel, _, tryNextTick ->
-            physLevel as VsiPhysLevel
-            if (creationToken != pendingJointCreationToken) return@physTickOnce
-
-            val match = physLevel.findMatchingJoint(joint)
-            if (match != null) {
-                this.joint = match.joint
-                this.jointID = match.jointId
-                physLevel.removeMatchingJointsExcept(match.joint, match.jointId)
-                isRunning = true
-                lastStateChanged = ticks
-                return@physTickOnce
-            }
-
-            if (
-                joint.shipId0 != null && physLevel.getShipById(joint.shipId0!!) == null ||
-                joint.shipId1 != null && physLevel.getShipById(joint.shipId1!!) == null
-            ) {
-                tryNextTick()
-                return@physTickOnce
-            }
-
-            val id = physLevel.addJoint(joint)
-            if (id == -1) {
-                if (creationToken == pendingJointCreationToken) tryNextTick()
-                return@physTickOnce
-            }
-            if (creationToken != pendingJointCreationToken) {
-                physLevel.removeJoint(id)
-                return@physTickOnce
-            }
-            this.jointID = id
-            physLevel.removeMatchingJointsExcept(joint, id)
-            isRunning = true
-            lastStateChanged = ticks
-        }
-    }
-
-    private fun removeTrackedJoint(serverLevel: ServerLevel) {
-        pendingJointCreationToken++
+    private fun removeJointAndDuplicates(serverLevel: ServerLevel) {
         val ids = linkedSetOf<Int>()
         if (jointID != -1) ids.add(jointID)
         joint?.let { ids.addAll(serverLevel.gtpa.findMatchingJointIds(it)) }
@@ -643,15 +577,15 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     }
 
     fun disassemble() {
-        if (!isRunning && shiptraptionID == NO_SHIPTRAPTION_ID) return
+        if (!isRunning && connectedShipId == -1L) return
         if (ticks - lastStateChanged <= cooldown) return
-        if (shiptraptionID == NO_SHIPTRAPTION_ID || level!!.isClientSide) {
+        if (connectedShipId == -1L || level!!.isClientSide) {
             resetState()
             return
         }
         val level = level as ServerLevel
-        val subShip = level.shipObjectWorld.loadedShips.getById(shiptraptionID) ?: run {
-            removeTrackedJoint(level)
+        val subShip = level.shipObjectWorld.loadedShips.getById(connectedShipId) ?: run {
+            removeJointAndDuplicates(level)
             resetState()
             return
         }
@@ -691,19 +625,16 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         if (mainCouldSplit) mainShip?.getAttachment<SplittingDisablerAttachment>()?.enableSplitting()
 
         if (!moved) return
-        removeTrackedJoint(level)
+        removeJointAndDuplicates(level)
         lastStateChanged = ticks
         resetState()
         detachKinetics()
     }
 
     private fun resetState() {
-        pendingJointCreationToken++
-        shiptraptionID = NO_SHIPTRAPTION_ID
+        connectedShipId = -1L
         isRunning = false
         assembleNextTick = false
-        restoreJointAfterLoad = false
-        deferredJointRestoreTries = 0
         joint = null
         jointID = -1
         clearGimbalDebugSnapshot()
@@ -717,7 +648,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         super.destroy()
         val level = level ?: return
         if (level.isClientSide || level !is ServerLevel) return
-        removeTrackedJoint(level)
+        removeJointAndDuplicates(level)
         resetState()
     }
 
@@ -726,7 +657,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
             clearGimbalDebugSnapshot()
             return
         }
-        val subShip = physLevel.getShipById(shiptraptionID) ?: run {
+        val subShip = physLevel.getShipById(connectedShipId) ?: run {
             clearGimbalDebugSnapshot()
             return
         }
@@ -1046,8 +977,6 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     override fun getLastAssemblyException(): AssemblyException? = lastException
     override fun getBlockPosition(): BlockPos = worldPosition
 
-
-
     private class ModeSlot : DirectionalExtenderScrollOptionSlot({ state, dir ->
         val facingAxis = state.getValue(BearingBlock.FACING).axis
         dir.axis != facingAxis && dir.axis != maxAngleAxisFor(facingAxis)
@@ -1105,7 +1034,6 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     }
 
     companion object {
-        const val NO_SHIPTRAPTION_ID: Long = -1
         const val DEFAULT_MAX_ANGLE_DEG = 45
         const val MAX_ANGLE_LIMIT_DEG = 55
         private const val MIN_LIMIT_RAD = 1e-3f

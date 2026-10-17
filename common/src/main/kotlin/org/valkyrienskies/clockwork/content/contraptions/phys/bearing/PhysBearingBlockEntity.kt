@@ -118,6 +118,9 @@ class PhysBearingBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state: B
     private val partnerShipId: ShipId
         get() = level.getShipManagingBlock(partnerPos)?.id ?: -1
 
+    // This is probably bad, it uses the game tick to get the joint
+    // but is accessed on phys tick as well.
+    // Should definitely fix this
     private val joint: VSJoint?
         get() = (level as? ServerLevel)?.gtpa?.getJointById(jointId)
 

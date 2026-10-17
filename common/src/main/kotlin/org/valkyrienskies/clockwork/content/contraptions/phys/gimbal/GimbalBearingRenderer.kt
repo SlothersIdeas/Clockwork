@@ -62,9 +62,9 @@ class GimbalBearingRenderer(context: BlockEntityRendererProvider.Context) : Smar
     }
 
     private fun createPlatePose(be: GimbalBearingBlockEntity, hostShip: ClientShip?): RenderPose? {
-        if (!be.isRunning || be.shiptraptionID == GimbalBearingBlockEntity.NO_SHIPTRAPTION_ID) return null
+        if (!be.isRunning || be.connectedShipId == -1L) return null
         val level = be.level ?: return null
-        val subShip = level.shipObjectWorld?.loadedShips?.getById(be.shiptraptionID) as? ClientShip ?: return null
+        val subShip = level.shipObjectWorld?.loadedShips?.getById(be.connectedShipId) as? ClientShip ?: return null
         val direction = be.getRenderDirection()
         val savedAxis = be.getRenderBearingAxisLocal()
         val axisLocal = if (savedAxis.lengthSquared() > 1e-12) savedAxis else direction.normal.toJOMLD()
