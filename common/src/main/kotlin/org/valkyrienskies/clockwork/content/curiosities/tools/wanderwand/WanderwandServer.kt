@@ -116,7 +116,9 @@ object WanderwandServer {
                 val first = state.rope
                 if (first == null) {
                     state.rope = target
-                    state.length = target.world(level)!!.distanceTo(player.position().add(0.0, 1.0, 0.0)).coerceIn(2.0, 64.0)
+                    // Make rope shorter if the player is in the air to make swinging easier
+                    val offset = if (player.onGround()) 1.0 else 0.9
+                    state.length = (target.world(level)!!.distanceTo(player.position().add(0.0, 1.0, 0.0)) * offset).coerceIn(2.0, 64.0)
                     state.previousAnchor = target.world(level)
                     state.previousPlayer = player.position()
                     state.lastRopeCorrection = -100L
