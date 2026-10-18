@@ -127,6 +127,9 @@ class PhysBearingBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state: B
     val isRunning: Boolean
         get() = (jointId != -1)
 
+    // Used for updating old clockwork versions
+    private var serializationNeedsUpdating = false
+
     // For the visuals
     private var open = false
     private var opening = false
@@ -284,6 +287,20 @@ class PhysBearingBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state: B
         if (tag.isEmpty) return
         if (tag.contains("jointId")) {
             jointId = tag.getInt("jointId")
+        }
+
+        // Old serialization
+        if (tag.contains("Angle")) {
+            tag.putFloat("targetAngle", tag.getFloat("Angle"))
+            val oldDirection = Direction.entries[tag.getInt("OriginalDirection")]
+            tag.putString("originalFacing", oldDirection.name)
+            tag.putFloat("sequencedAngleLimit", tag.getFloat("SequencedAngleLimit"))
+            tag.putFloat("sequencedAngleProgress", tag.getFloat("SequencedAngleProgress"))
+            tag.getVector3d("NewShiptraptionCenter")?.let {
+                tag.putVector3d("partnerPos", it.add(oldDirection.normal.toJOMLD()))
+            }
+            jointId = -1
+            serializationNeedsUpdating = true
         }
 
         if (tag.contains("originalFacing")) {
@@ -486,6 +503,12 @@ class PhysBearingBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state: B
 
     override fun tick() {
         super.tick()
+
+        if (serializationNeedsUpdating && level is ServerLevel) {
+            updateJoint(level as ServerLevel)
+            serializationNeedsUpdating = false
+        }
+
         if (level!!.isClientSide) {
             tickAnimationLogic()
             return
