@@ -1,6 +1,7 @@
 package org.valkyrienskies.clockwork.content.forces
 
 import org.joml.Matrix4dc
+import org.joml.Matrix3d
 import org.joml.Quaterniond
 import org.joml.Vector3d
 import org.joml.Vector3dc
@@ -39,14 +40,22 @@ internal object PropellerAerodynamics {
      */
     fun sectionForce(
         velocityThroughAir: Vector3dc, span: Vector3dc, chord: Vector3dc, density: Double
-    ): Vector3d {
-        val force = Vector3d()
+    ): Vector3d = sectionResponse(velocityThroughAir, span, chord, density)
+        .transform(velocityThroughAir, Vector3d()).let { if (it.isFinite) it else Vector3d() }
+
+    /** Freeze the polar and speed, but retain the force's dependence on velocity.
+     * Its symmetric part is drag (negative semidefinite); lift is skew-symmetric.
+     */
+    private fun sectionResponse(
+        velocityThroughAir: Vector3dc, span: Vector3dc, chord: Vector3dc, density: Double
+    ): Matrix3d {
+        val response = Matrix3d().zero()
         if (!velocityThroughAir.isFinite || !span.isFinite || !chord.isFinite ||
-            !density.isFinite() || density <= 0.0 || span.lengthSquared() < EPSILON) return force
+            !density.isFinite() || density <= 0.0 || span.lengthSquared() < EPSILON) return response
 
         val normal = span.cross(chord, Vector3d())
         val area = normal.length()
-        if (!area.isFinite() || area < EPSILON) return force
+        if (!area.isFinite() || area < EPSILON) return response
         normal.div(area)
         val spanUnit = Vector3d(span).normalize()
         val chordUnit = normal.cross(spanUnit, Vector3d())
@@ -56,14 +65,18 @@ internal object PropellerAerodynamics {
         if (speedSquared > EPSILON) {
             val alpha = atan2(-sectionVelocity.dot(normal), sectionVelocity.dot(chordUnit))
             val polar = coefficients(alpha)
-            val flowDirection = sectionVelocity.normalize()
-            val liftDirection = spanUnit.cross(flowDirection, Vector3d())
-            val dynamicPressureArea = 0.5 * density * speedSquared * area
-            force.set(liftDirection).mul(polar.lift * dynamicPressureArea)
-                .sub(Vector3d(flowDirection).mul(polar.drag * dynamicPressureArea))
+            val pressureAreaPerSpeed = 0.5 * density * sqrt(speedSquared) * area
+            for (column in 0..2) {
+                val basis = Vector3d().setComponent(column, 1.0)
+                val projected = Vector3d(basis).sub(Vector3d(spanUnit).mul(spanUnit.get(column)))
+                response.setColumn(column, spanUnit.cross(basis, Vector3d()).mul(polar.lift)
+                    .sub(projected.mul(polar.drag)).mul(pressureAreaPerSpeed))
+            }
         }
-        force.sub(Vector3d(spanUnit).mul(0.5 * density * area * PROFILE_DRAG * spanSpeed * abs(spanSpeed)))
-        return if (force.isFinite) force else Vector3d()
+        val spanDrag = 0.5 * density * area * PROFILE_DRAG * abs(spanSpeed)
+        for (column in 0..2) response.setColumn(column, response.getColumn(column, Vector3d())
+            .sub(Vector3d(spanUnit).mul(spanDrag * spanUnit.get(column))))
+        return if (response.isFinite) response else Matrix3d().zero()
     }
 
     data class Flow(
@@ -84,26 +97,39 @@ internal object PropellerAerodynamics {
         val pitch: Double
     )
 
+    data class Section(val lever: Vector3dc, val response: Matrix3d)
+
+    data class PreparedRotor(
+        val force: Vector3dc = Vector3d(), val torque: Vector3dc = Vector3d(),
+        val sections: List<Section> = emptyList()
+    )
+
     fun compute(
         prop: PropData, flow: Flow, angleDegrees: Double, forceMultiplier: Double,
         maxForce: Double, maxTorque: Double, radialSegments: Int = 8
-    ): Pair<Vector3dc, Vector3dc> {
+    ): Pair<Vector3dc, Vector3dc> = prepare(prop, flow, angleDegrees, forceMultiplier, maxForce, maxTorque, radialSegments)
+        .let { it.force to it.torque }
+
+    fun prepare(
+        prop: PropData, flow: Flow, angleDegrees: Double, forceMultiplier: Double,
+        maxForce: Double, maxTorque: Double, radialSegments: Int = 8
+    ): PreparedRotor {
         val force = Vector3d()
         val torque = Vector3d()
-        val position = prop.position ?: return force to torque
-        val baseAxis = Vector3d(prop.bearingAxis ?: return force to torque)
+        val position = prop.position ?: return PreparedRotor()
+        val baseAxis = Vector3d(prop.bearingAxis ?: return PreparedRotor())
         if (!baseAxis.isFinite || baseAxis.lengthSquared() < EPSILON || !angleDegrees.isFinite() ||
             !prop.bearingSpeed.isFinite() || !forceMultiplier.isFinite() || forceMultiplier <= 0.0 ||
             !flow.modelToWorld.isFinite || !flow.centerOfMassModel.isFinite || !flow.velocityWorld.isFinite ||
-            !flow.angularVelocityWorld.isFinite || !flow.windWorld.isFinite) return force to torque
+            !flow.angularVelocityWorld.isFinite || !flow.windWorld.isFinite) return PreparedRotor()
         baseAxis.normalize()
         val facingSign = PropellerTransform.facingSign(baseAxis)
         val tilt = prop.bearingTiltQuat?.let { Quaterniond(it) } ?: run {
             val tiltedAxis = prop.bearingAxisRot ?: baseAxis
-            if (!tiltedAxis.isFinite || tiltedAxis.lengthSquared() < EPSILON) return force to torque
+            if (!tiltedAxis.isFinite || tiltedAxis.lengthSquared() < EPSILON) return PreparedRotor()
             Quaterniond().rotationTo(baseAxis, Vector3d(tiltedAxis).normalize())
         }
-        if (!tilt.isFinite || tilt.lengthSquared() < EPSILON) return force to torque
+        if (!tilt.isFinite || tilt.lengthSquared() < EPSILON) return PreparedRotor()
         tilt.normalize()
         val orientation = PropellerTransform.orientation(baseAxis, tilt, angleDegrees)
         val axis = tilt.transform(baseAxis, Vector3d())
@@ -152,6 +178,9 @@ internal object PropellerAerodynamics {
                 .add(flow.angularVelocityWorld.cross(leverWorld, Vector3d())).add(spinVelocity)
         }
 
+        // Store collective in the normal rotation setting's handedness. Mirroring only
+        // the physical pitch keeps startup and live setting changes consistent too.
+        val sailPitchSign = if (prop.inverted) -1.0 else 1.0
         if (prop.brass && elements.isNotEmpty()) {
             val rotationSign = if (omega < 0.0) -1.0 else 1.0
             var inflow = 0.0
@@ -167,32 +196,37 @@ internal object PropellerAerodynamics {
             // pitch creates an artificial thrust cliff as inflow crosses that limit;
             // stall and drag depend on each section's angle to the air, not the rotor plane.
             // atan2 above already bounds the target to -86..94 degrees for finite flow.
-            val targetPitch = inflow / elements.size + Math.toRadians(4.0)
+            val targetPitch = sailPitchSign * inflow / elements.size + Math.toRadians(4.0)
             // One collective update per rotor, independent of sail count and iteration order.
             if (!prop.currentBladePitch.isFinite()) prop.currentBladePitch = Math.toRadians(4.0)
             prop.currentBladePitch += 0.05 * (targetPitch - prop.currentBladePitch)
         }
 
+        val sections = ArrayList<Section>(elements.size)
         for (element in elements) {
-            val pitch = if (prop.brass) prop.currentBladePitch else element.pitch
+            val pitch = if (prop.brass) sailPitchSign * prop.currentBladePitch else element.pitch
             val spanWorld = flow.modelToWorld.transformDirection(Vector3d(element.span).mul(element.spanLength))
             val chordWorld = flow.modelToWorld.transformDirection(
                 Vector3d(element.tangent).mul(cos(pitch)).add(Vector3d(axis).mul(sin(pitch))).mul(element.chordLength)
             )
             val pointModel = Vector3d(hub).add(element.offset)
             val pointWorld = flow.modelToWorld.transformPosition(pointModel, Vector3d())
-            val elementForce = sectionForce(velocityAt(element.offset), spanWorld, chordWorld, flow.densityAtHeight(pointWorld.y))
-                .mul(forceMultiplier)
+            val velocity = velocityAt(element.offset)
+            val response = sectionResponse(velocity, spanWorld, chordWorld, flow.densityAtHeight(pointWorld.y))
+                .scale(forceMultiplier)
+            val elementForce = response.transform(velocity, Vector3d())
             val leverWorld = flow.modelToWorld.transformDirection(pointModel.sub(flow.centerOfMassModel))
+            sections.add(Section(leverWorld, response))
             force.add(elementForce)
             torque.add(leverWorld.cross(elementForce, Vector3d()))
         }
 
-        if (!force.isFinite || !torque.isFinite) return Vector3d() to Vector3d()
+        if (!force.isFinite || !torque.isFinite) return PreparedRotor()
         var fraction = 1.0
         if (maxForce > 0.0 && force.length() > maxForce) fraction = min(fraction, maxForce / force.length())
         if (maxTorque > 0.0 && torque.length() > maxTorque) fraction = min(fraction, maxTorque / torque.length())
-        return force.mul(fraction) to torque.mul(fraction)
+        if (fraction < 1.0) sections.forEach { it.response.scale(fraction) }
+        return PreparedRotor(force.mul(fraction), torque.mul(fraction), sections)
     }
 
     private fun perpendicular(axis: Vector3dc): Vector3d {

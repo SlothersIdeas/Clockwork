@@ -158,12 +158,18 @@ class ClockworkForgeGameTests {
         }
 
         @JvmStatic
+        @GameTest(timeoutTicks = 200, setupTicks = 12, batch = "props", template = "proptestpositive")
+        fun sailPropReversedRotationKeepsThrust(helper: GameTestHelper) {
+            generalPropellerTest(helper, Direction.SOUTH, inverted = true)
+        }
+
+        @JvmStatic
         @GameTest(timeoutTicks = 240, setupTicks = 12, batch = "props", template = "bladetestpositive")
         fun bladePropAtLowRPM(helper: GameTestHelper) {
             generalPropellerTest(helper, Direction.NORTH, rpm = 64)
         }
 
-        fun generalPropellerTest(helper: GameTestHelper, direction: Direction, rpm: Int? = null) {
+        fun generalPropellerTest(helper: GameTestHelper, direction: Direction, rpm: Int? = null, inverted: Boolean = false) {
             // Extend the fixture's ice floor; otherwise its edge tests terrain traversal, not propulsion.
             for (z in (-16..-1) + (7..22)) for (x in 1..5) for (y in 1..6) {
                 val pos = helper.absolutePos(BlockPos(x, y, z))
@@ -224,6 +230,8 @@ class ClockworkForgeGameTests {
                     ship.id, direction, bearing, initialPosition, aabb)
 
                 helper.runAfterDelay(10) {
+                    val be = helper.level.getBlockEntity(bearing) as PropellerBearingBlockEntity
+                    be.rotationDirection.setValue(if (inverted) RotationDirection.INVERTED.ordinal else RotationDirection.NORMAL.ordinal)
                     if (rpm != null) {
                         val motor = helper.level.getBlockEntity(bearing.relative(Direction.NORTH)) as CreativeMotorBlockEntity
                         motor.generatedSpeed.setValue(rpm)
@@ -233,6 +241,7 @@ class ClockworkForgeGameTests {
 
                 helper.succeedWhen {
                     val be = helper.level.getBlockEntity(bearing) as PropellerBearingBlockEntity
+                    helper.assertTrue(be.isInverted() == inverted, "Propeller rotation setting was not applied")
                     helper.assertTrue(helper.level.shipObjectWorld.loadedShips.getById(ship.id) != null, "Test ship is not loaded into physics")
                     helper.assertTrue(be.running && be.active && kotlin.math.abs(be.currentOmega) > 1.0,
                         "Propeller is not running: active=${be.active}, input=${be.speed}, omega=${be.currentOmega}")

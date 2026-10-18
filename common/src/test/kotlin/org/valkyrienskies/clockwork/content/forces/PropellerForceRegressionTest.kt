@@ -3,6 +3,7 @@ package org.valkyrienskies.clockwork.content.forces
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.joml.Matrix3d
 import org.joml.Matrix4d
 import org.joml.Quaterniond
 import org.joml.Vector3d
@@ -316,10 +317,54 @@ class PropellerForceRegressionTest {
     }
 
     @Test
-    fun `physics tick applies each complete force and moment at the center of mass`() {
+    fun `controller combines multiple rotors and rotates inertia before braking the ship`() {
+        ClockworkConfig.SERVER.forceMulPerSailInPropeller = 240.0
+        ClockworkConfig.SERVER.sailPropellerForceMultiplier = 4.0
+        ClockworkConfig.SERVER.propellerMaxForce = 0.0
+        ClockworkConfig.SERVER.propellerMaxTorque = 0.0
+        val inertia = Matrix3d().scaling(20000.0, 40000.0, 80000.0)
+        fun tick(rotation: Quaterniond): Pair<Vector3dc, Vector3dc> {
+            val velocity = rotation.transform(Vector3d(10.0, -20.0, 100.0))
+            val omega = rotation.transform(Vector3d(1.0, 2.0, -3.0))
+            val physicsShip = ship(velocity = velocity, omega = omega, rotation = rotation)
+            every { physicsShip.momentOfInertia } returns inertia
+            val force = Vector3d()
+            val torque = Vector3d()
+            every { physicsShip.applyWorldForceToBodyPos(any(), any()) } answers { force.set(firstArg<Vector3dc>()); Unit }
+            every { physicsShip.applyWorldTorque(any()) } answers { torque.set(firstArg<Vector3dc>()); Unit }
+            val tickingController = PropellerController()
+            for (index in 0..1) tickingController.appliers[index] = PropData(
+                Vector3i(index * 6 - 3, 0, 0), Vector3d(0.0, 0.0, 1.0), 0.0, 0.0,
+                (1..3).flatMap { r -> listOf(Vector3i(r, 0, 0), Vector3i(-r, 0, 0), Vector3i(0, r, 0), Vector3i(0, -r, 0)) },
+                false, true, true, emptyList()
+            )
+            tickingController.physTick(physicsShip, level)
+            verify(exactly = 1) { physicsShip.applyWorldForceToBodyPos(any(), match { it.lengthSquared() == 0.0 }) }
+            verify(exactly = 1) { physicsShip.applyWorldTorque(any()) }
+            assertTrue(force.length() > 0.0)
+            val r = Matrix3d().rotation(rotation)
+            val worldInertia = Matrix3d(r).mul(inertia).mul(r.transpose(Matrix3d()))
+            val nextV = Vector3d(velocity).add(Vector3d(force).mul(1.0 / 60 / physicsShip.mass))
+            val nextW = Vector3d(omega).add(Matrix3d(worldInertia).invert().transform(torque, Vector3d()).mul(1.0 / 60))
+            fun energy(v: Vector3dc, w: Vector3dc) = physicsShip.mass * v.lengthSquared() + w.dot(worldInertia.transform(w, Vector3d()))
+            assertTrue(energy(nextV, nextW) < energy(velocity, omega))
+            return force to torque
+        }
+        val rotation = Quaterniond().rotateXYZ(.7, -.5, .3)
+        val base = tick(Quaterniond())
+        val rotated = tick(rotation)
+        assertVectorEquals(rotation.transform(base.first, Vector3d()), rotated.first)
+        assertVectorEquals(rotation.transform(base.second, Vector3d()), rotated.second)
+    }
+
+    @Test
+    fun `physics tick applies the solved force and moment at the center of mass`() {
         for (sails in listOf(true, false)) {
             val physicsShip = ship()
-            val expected = forces(propeller(sails), physicsShip)
+            val flow = PropellerAerodynamics.Flow(physicsShip.transform.shipToWorld, physicsShip.centerOfMass,
+                physicsShip.velocity, physicsShip.angularVelocity, Vector3d()) { rho }
+            val prepared = PropellerAerodynamics.prepare(propeller(sails), flow, 0.0, 12.0, 1e12, 1e12)
+            val expected = PropellerImpulseSolver.solve(listOf(prepared), physicsShip.mass, physicsShip.momentOfInertia)
             val tickingController = PropellerController()
             tickingController.appliers[0] = propeller(sails)
             tickingController.physTick(physicsShip, level)
@@ -351,6 +396,7 @@ class PropellerForceRegressionTest {
             .translate(Vector3d(com).negate())
         val transform = mockk<ShipTransform> {
             every { shipToWorld } returns matrix
+            every { shipToWorldRotation } returns rotation
             every { positionInWorld } returns worldCom
             every { positionInShip } returns com
         }
@@ -360,6 +406,8 @@ class PropellerForceRegressionTest {
             every { angularVelocity } returns omega
             every { this@mockk.omega } returns omega
             every { centerOfMass } returns com
+            every { mass } returns 10000.0
+            every { momentOfInertia } returns Matrix3d().scale(40000.0)
             every { dragController!!.getWindVector() } returns wind
         }
     }

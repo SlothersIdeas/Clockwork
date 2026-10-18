@@ -2,6 +2,7 @@ package org.valkyrienskies.clockwork.content.forces
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect
 import net.minecraft.util.Mth
+import org.joml.Matrix3d
 import org.joml.Vector3d
 import org.joml.Vector3dc
 import org.valkyrienskies.clockwork.ClockworkConfig
@@ -34,19 +35,18 @@ class PropellerController(
         if (applierUpdateData.isNotEmpty()) ticksSinceLastUpdate = 0
         super.physTick(physShip, physLevel)
 
-        // Propeller Thrust
-        for (physData in appliers.values) {
-            if(physData.active) {
-                val (force, torque) = if (physData.brass) computeForce(physShip.transform, physData, physShip.velocity, physShip.angularVelocity, physShip, physLevel)
-                else computeBladeForce(physShip, physData, physLevel)
-
-                if (force.isFinite && torque.isFinite) {
-                    // Both models return the complete world-space force and moment about the COM.
-                    physShip.applyWorldForceToBodyPos(force)
-                    physShip.applyWorldTorque(torque)
-
-                }
-            }
+        val rotors = appliers.values.filter { it.active }.map {
+            prepareAerodynamics(physShip.transform, it, physShip.velocity, physShip.angularVelocity, physShip, physLevel)
+        }
+        if (rotors.isNotEmpty()) {
+            // The API inertia tensor already includes ship scale, but is in model axes.
+            val rotation = Matrix3d().rotation(physShip.transform.shipToWorldRotation)
+            val inertiaWorld = Matrix3d(rotation).mul(physShip.momentOfInertia).mul(rotation.transpose(Matrix3d()))
+            val (force, torque) = PropellerImpulseSolver.solve(rotors, physShip.mass, inertiaWorld,
+                ClockworkConfig.SERVER.propellerMaxForce, ClockworkConfig.SERVER.propellerMaxTorque)
+            // One coupled impulse, with its complete world-space moment about the COM.
+            physShip.applyWorldForceToBodyPos(force)
+            physShip.applyWorldTorque(torque)
         }
 
         // Propeller Pushing
@@ -60,18 +60,19 @@ class PropellerController(
         omega: Vector3dc,
         physShip: PhysShip,
         physLevel: PhysLevel
-    ): Pair<Vector3dc, Vector3dc> = computeAerodynamics(physTransform, physProp, vel, omega, physShip, physLevel)
+    ): Pair<Vector3dc, Vector3dc> = prepareAerodynamics(physTransform, physProp, vel, omega, physShip, physLevel)
+        .let { it.force to it.torque }
 
     internal fun computeBladeForce(
         physShip: PhysShip, physProp: PropData, physLevel: PhysLevel
-    ): Pair<Vector3dc, Vector3dc> = computeAerodynamics(
+    ): Pair<Vector3dc, Vector3dc> = prepareAerodynamics(
         physShip.transform, physProp, physShip.velocity, physShip.angularVelocity, physShip, physLevel
-    )
+    ).let { it.force to it.torque }
 
-    private fun computeAerodynamics(
+    private fun prepareAerodynamics(
         transform: ShipTransform, prop: PropData, velocity: Vector3dc, angularVelocity: Vector3dc,
         ship: PhysShip, level: PhysLevel
-    ): Pair<Vector3dc, Vector3dc> {
+    ): PropellerAerodynamics.PreparedRotor {
         val flow = PropellerAerodynamics.Flow(
             transform.shipToWorld, ship.centerOfMass, velocity, angularVelocity,
             (ship as VsiPhysShip).dragController?.getWindVector() ?: Vector3d()
@@ -80,7 +81,7 @@ class PropellerController(
         // `brass` selects sail aerodynamics; item blades on a brass bearing still use the blade model.
         val forceMultiplier = ClockworkConfig.SERVER.forceMulPerSailInPropeller *
             if (prop.brass) ClockworkConfig.SERVER.sailPropellerForceMultiplier else 1.0
-        return PropellerAerodynamics.compute(
+        return PropellerAerodynamics.prepare(
             prop, flow, estimatedAngle, forceMultiplier,
             ClockworkConfig.SERVER.propellerMaxForce, ClockworkConfig.SERVER.propellerMaxTorque
         )

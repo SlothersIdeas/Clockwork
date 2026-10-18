@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.valkyrienskies.clockwork.content.contraptions.propeller.blades.BladeData
 import org.valkyrienskies.clockwork.content.contraptions.propeller.data.PropData
+import org.valkyrienskies.clockwork.content.contraptions.propeller.data.PropUpdateData
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.pow
@@ -227,6 +228,61 @@ class PropellerAerodynamicsTest {
             assertVector(normalResult.first, reversedResult.first)
             assertTrue(abs(normalResult.second.dot(shaft)) > 1e-6)
             assertEquals(-normalResult.second.dot(shaft), reversedResult.second.dot(shaft), 1e-8)
+        }
+    }
+
+    @Test
+    fun `sail rotation setting preserves thrust and opposes shaft torque from startup through inflow adjustment`() {
+        val tilt = Quaterniond().rotateX(0.3).rotateY(-0.2)
+        for (axis in listOf(
+            Vector3d(1.0, 0.0, 0.0), Vector3d(-1.0, 0.0, 0.0), Vector3d(0.0, 1.0, 0.0),
+            Vector3d(0.0, -1.0, 0.0), Vector3d(0.0, 0.0, 1.0), Vector3d(0.0, 0.0, -1.0)
+        )) for (rpm in listOf(-64.0, 64.0)) for (speed in listOf(-12.0, 0.0, 12.0)) {
+            val span = if (abs(axis.x) < 0.5) Vector3i(1, 0, 0) else Vector3i(0, 1, 0)
+            val tangent = axis.cross(Vector3d(span), Vector3d())
+            val other = Vector3i(tangent.x.toInt(), tangent.y.toInt(), tangent.z.toInt())
+            val sails = listOf(span, other, Vector3i(span).negate(), Vector3i(other).negate())
+            fun prop(inverted: Boolean) = PropData(
+                Vector3i(), axis, 0.0, rpm * 0.3 * if (inverted) -1.0 else 1.0,
+                sails, inverted, true, true, emptyList()
+            ).apply { bearingTiltQuat = tilt }
+            val normal = prop(false)
+            val reversed = prop(true)
+            val shaft = tilt.transform(axis, Vector3d())
+            val flow = flow(velocity = Vector3d(shaft).mul(speed))
+            // Check the initial 12-degree collective as well as the full adjustment.
+            repeat(160) {
+                val a = solve(normal, flow, angle = 37.0)
+                val b = solve(reversed, flow, angle = -37.0)
+                assertVector(a.first, b.first)
+                assertEquals(-a.second.dot(shaft), b.second.dot(shaft), 1e-8)
+                assertEquals(normal.currentBladePitch, reversed.currentBladePitch, 1e-12)
+                if (speed == 0.0) {
+                    assertTrue(a.first.dot(shaft) * rpm * (axis.x + axis.y + axis.z) > 0.0)
+                    assertTrue(abs(a.second.dot(shaft)) > 1e-6)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `changing sail rotation setting mirrors existing collective without resetting it`() {
+        val prop = rotor(sails = true, rpm = 64.0)
+        val initial = solve(prop)
+        prop.updateData(PropUpdateData(-prop.bearingSpeed, 0.0, true, true, emptyList()))
+        val reversed = solve(prop)
+        assertVector(initial.first, reversed.first)
+        assertVector(Vector3d(initial.second).negate(), reversed.second)
+        assertEquals(Math.toRadians(4.0), prop.currentBladePitch, 1e-12)
+    }
+
+    @Test
+    fun `input RPM still reverses sail thrust in either rotation setting`() {
+        for (inverted in listOf(false, true)) {
+            val positive = solve(rotor(sails = true, rpm = 64.0).apply { this.inverted = inverted })
+            val negative = solve(rotor(sails = true, rpm = -64.0).apply { this.inverted = inverted })
+            assertVector(Vector3d(positive.first).negate(), negative.first)
+            assertVector(Vector3d(positive.second).negate(), negative.second)
         }
     }
 
