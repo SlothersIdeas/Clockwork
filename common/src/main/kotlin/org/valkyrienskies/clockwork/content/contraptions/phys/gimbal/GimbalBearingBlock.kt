@@ -5,6 +5,8 @@ import com.simibubi.create.content.contraptions.bearing.BearingBlock
 import com.simibubi.create.foundation.block.IBE
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
+import net.minecraft.nbt.CompoundTag
+import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.player.Player
@@ -13,15 +15,66 @@ import net.minecraft.world.level.BlockGetter
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.LevelReader
 import net.minecraft.world.level.block.Block
+import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.shapes.CollisionContext
 import net.minecraft.world.phys.shapes.VoxelShape
+import org.joml.Vector3d
+import org.joml.Vector3dc
 import org.valkyrienskies.clockwork.ClockworkBlockEntities
+import org.valkyrienskies.core.api.ships.ServerShip
+import org.valkyrienskies.mod.api.toMinecraft
+import org.valkyrienskies.mod.common.assembly.ICopyableBlock
 import java.util.function.Consumer
 
-class GimbalBearingBlock(properties: Properties) : BearingBlock(properties), IBE<GimbalBearingBlockEntity> {
+class GimbalBearingBlock(properties: Properties) : BearingBlock(properties), IBE<GimbalBearingBlockEntity>, ICopyableBlock {
+
+    override fun onCopy(
+        level: ServerLevel,
+        pos: BlockPos,
+        state: BlockState,
+        be: BlockEntity?,
+        shipsBeingCopied: List<ServerShip>,
+        centerPositions: Map<Long, Vector3dc>
+    ): CompoundTag? {
+        return null
+    }
+
+    override fun onPaste(
+        level: ServerLevel,
+        pos: BlockPos,
+        state: BlockState,
+        oldShipIdToNewId: Map<Long, Long>,
+        centerPositions: Map<Long, Pair<Vector3dc, Vector3dc>>,
+        tag: CompoundTag?
+    ): CompoundTag? {
+        tag ?: return null
+
+        if (tag.contains("BearingPosSX")) {
+            val x = tag.getDouble("BearingPosSX")
+            val y = tag.getDouble("BearingPosSY")
+            val z = tag.getDouble("BearingPosSZ")
+
+            var vectorPartner = Vector3d(x, y, z)
+
+            val partnerId = tag.getLong("connectedShip")
+            val centerMigrate = centerPositions[partnerId] ?: return null
+            vectorPartner = vectorPartner.sub(centerMigrate.first).add(centerMigrate.second)
+            val bp = vectorPartner.toMinecraft()
+            tag.putDouble("BearingPosSX", bp.x)
+            tag.putDouble("BearingPosSY", bp.y)
+            tag.putDouble("BearingPosSZ", bp.z)
+
+            tag.putLong("connectedShip", oldShipIdToNewId[partnerId] ?: -1)
+
+            tag.putInt("JointID", -1)
+            return tag
+        }
+
+        return null
+    }
 
     override fun use(state: BlockState, worldIn: Level, pos: BlockPos, player: Player, handIn: InteractionHand, hit: BlockHitResult): InteractionResult {
         if (!player.mayBuild()) return InteractionResult.FAIL

@@ -21,6 +21,7 @@ import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.ClipContext
+import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import org.joml.AxisAngle4d
@@ -56,10 +57,12 @@ import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toJOMLD
 import org.valkyrienskies.mod.common.world.clipIncludeShips
 import org.valkyrienskies.core.api.attachment.getAttachment
+import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.properties.ShipId
 import org.valkyrienskies.core.api.util.PhysTickOnly
 import org.valkyrienskies.kelvin.util.KelvinExtensions.toMinecraft
 import org.valkyrienskies.mod.api.getShipById
+import org.valkyrienskies.mod.common.assembly.ICopyableBlock
 import java.util.EnumMap
 import kotlin.math.abs
 import kotlin.math.min
@@ -68,7 +71,8 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     GeneratingKineticBlockEntity(type, pos, state),
     IBearingBlockEntity,
     IDisplayAssemblyExceptions,
-    BlockEntityPhysicsListener {
+    BlockEntityPhysicsListener
+{
 
     @Volatile override lateinit var dimension: DimensionId
 
