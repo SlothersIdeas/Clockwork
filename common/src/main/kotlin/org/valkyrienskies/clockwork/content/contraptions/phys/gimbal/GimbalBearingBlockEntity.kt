@@ -1080,7 +1080,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
 
 
     private class MaxAngleSlot : DirectionalExtenderScrollOptionSlot({ state, dir ->
-        dir.axis == maxAngleAxisFor(state.getValue(BearingBlock.FACING).axis)
+        dir.axis != state.getValue(BearingBlock.FACING).axis
     }) {
         override fun getSouthLocation(): Vec3 {
             return VecHelper.voxelSpace(8.0, 8.0, 14.0)
