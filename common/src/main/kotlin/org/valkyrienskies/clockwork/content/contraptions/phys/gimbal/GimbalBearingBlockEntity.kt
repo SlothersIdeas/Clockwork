@@ -268,7 +268,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     }
 
     override fun getRenderBoundingBox(): AABB {
-        return AABB(worldPosition).inflate(2.0)
+        return AABB(worldPosition).inflate(0.5, 1.0, 0.5)
     }
 
     private fun refreshFrequencySignalsFromNetwork() {
