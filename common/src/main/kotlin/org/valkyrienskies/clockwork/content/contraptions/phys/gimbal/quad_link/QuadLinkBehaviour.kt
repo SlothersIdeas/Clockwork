@@ -157,19 +157,6 @@ open class QuadLinkBehaviour(
     private val handler: RedstoneLinkNetworkHandler
         get() = Create.REDSTONE_LINK_NETWORK_HANDLER
 
-    class SlotPositioning(
-        var rotation: Function<BlockState, Vec3>
-    ) {
-        var scale: Float = 1f
-
-        fun scale(scale: Float): QuadLinkBehaviour.SlotPositioning {
-            this.scale = scale
-            return this
-        }
-    }
-
-
-
     fun testHit(first: Boolean, hit: Vec3): Boolean {
         val state = blockEntity.blockState
 
