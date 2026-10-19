@@ -5,12 +5,10 @@ import com.simibubi.create.content.contraptions.*
 import com.simibubi.create.content.contraptions.bearing.BearingBlock
 import com.simibubi.create.content.contraptions.bearing.IBearingBlockEntity
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity
+import com.simibubi.create.content.kinetics.base.IRotate
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity
 import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer
 import com.simibubi.create.content.redstone.link.RedstoneLinkNetworkHandler
-import com.simibubi.create.content.contraptions.DirectionalExtenderScrollOptionSlot
-import com.simibubi.create.content.kinetics.base.IRotate
-import com.simibubi.create.content.kinetics.base.KineticBlockEntity
 import com.simibubi.create.foundation.blockEntity.behaviour.BehaviourType
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour
 import com.simibubi.create.foundation.blockEntity.behaviour.ValueBoxTransform
@@ -26,7 +24,6 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.util.Mth
 import net.minecraft.world.level.ClipContext
 import net.minecraft.world.level.LevelAccessor
-import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.phys.Vec3
@@ -41,11 +38,9 @@ import org.valkyrienskies.clockwork.content.contraptions.phys.gimbal.quad_link.Q
 import org.valkyrienskies.clockwork.util.*
 import org.valkyrienskies.clockwork.util.ClockworkUtils.getVector3d
 import org.valkyrienskies.clockwork.util.GlueAssembler.collectGlued
-import org.valkyrienskies.clockwork.util.findMatchingJointIds
-import org.valkyrienskies.clockwork.util.gtpa
-import org.valkyrienskies.clockwork.util.updateJoint
 import org.valkyrienskies.core.api.attachment.getAttachment
 import org.valkyrienskies.core.api.ships.PhysShip
+import org.valkyrienskies.core.api.ships.properties.ShipId
 import org.valkyrienskies.core.api.util.PhysTickOnly
 import org.valkyrienskies.core.api.world.PhysLevel
 import org.valkyrienskies.core.api.world.properties.DimensionId
@@ -59,24 +54,13 @@ import org.valkyrienskies.core.internal.joints.VSSphericalJoint
 import org.valkyrienskies.core.util.datastructures.DenseBlockPosSet
 import org.valkyrienskies.kelvin.util.KelvinExtensions.toMinecraft
 import org.valkyrienskies.mod.api.BlockEntityPhysicsListener
-import org.valkyrienskies.mod.api.dimensionId
 import org.valkyrienskies.mod.common.*
 import org.valkyrienskies.mod.common.assembly.ShipAssembler.assembleToShip
 import org.valkyrienskies.mod.common.assembly.VSAssemblyEvents
-import org.valkyrienskies.mod.common.getShipObjectManagingPos
-import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
 import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toJOMLD
 import org.valkyrienskies.mod.common.world.clipIncludeShips
-import org.valkyrienskies.core.api.attachment.getAttachment
-import org.valkyrienskies.core.api.ships.ServerShip
-import org.valkyrienskies.core.api.ships.properties.ShipId
-import org.valkyrienskies.core.api.util.PhysTickOnly
-import org.valkyrienskies.kelvin.util.KelvinExtensions.toMinecraft
-import org.valkyrienskies.mod.api.getShipById
-import org.valkyrienskies.mod.common.assembly.ICopyableBlock
-import java.util.EnumMap
 import java.util.*
 import kotlin.math.abs
 import kotlin.math.min
@@ -623,7 +607,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         }
 
         val shipOnID = shipOn?.id
-        val subJointAnchor = Vector3d(otherShipCenterPos).fma(-FACE_ATTACHMENT_OFFSET_BLOCKS, axis)
+        val subJointAnchor = Vector3d(otherShipCenterPos).fma(-0.15, axis)
 
         val posInWorld = shipOn?.transform?.shipToWorld?.transformPosition(
             Vector3d(ownerJointAnchor).sub(subJointAnchor).add(newOtherShip.inertiaData.centerOfMass), Vector3d()
