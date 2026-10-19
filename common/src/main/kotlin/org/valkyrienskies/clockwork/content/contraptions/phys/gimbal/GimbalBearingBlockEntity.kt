@@ -26,6 +26,7 @@ import net.minecraft.world.level.ClipContext
 import net.minecraft.world.level.LevelAccessor
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
+import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import org.joml.AxisAngle4d
 import org.joml.Quaterniond
@@ -264,6 +265,10 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     fun onNeighborChanged() {
         refreshFrequencySignalsFromNetwork()
         updateRedstoneVector()
+    }
+
+    override fun getRenderBoundingBox(): AABB {
+        return AABB(worldPosition).inflate(2.0)
     }
 
     private fun refreshFrequencySignalsFromNetwork() {
