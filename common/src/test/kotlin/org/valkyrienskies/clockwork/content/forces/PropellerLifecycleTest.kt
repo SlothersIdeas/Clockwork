@@ -31,7 +31,7 @@ class PropellerLifecycleTest {
             assertEquals(replacement.brass, data.brass)
             assertEquals(replacement.blades, data.blades)
             assertEquals(replacement.sailPositions, data.sailPositions)
-            assertEquals(Math.toRadians(12.0), data.currentBladePitch, 0.0)
+            assertEquals(Math.toRadians(4.0), data.currentBladePitch, 0.0)
         }
     }
 

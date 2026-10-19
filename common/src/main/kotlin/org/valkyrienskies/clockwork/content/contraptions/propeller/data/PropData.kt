@@ -25,7 +25,7 @@ class PropData: ForceApplierData<PropUpdateData> {
     var bearingTiltQuat: Quaterniondc? = null
 
     /** Sail collective in normal-setting handedness; the solver mirrors it when inverted. */
-    var currentBladePitch = Math.toRadians(12.0)
+    var currentBladePitch = Math.toRadians(4.0)
 
     override fun updateData(data: PropUpdateData) {
         bearingAngle = data.rotationAngle

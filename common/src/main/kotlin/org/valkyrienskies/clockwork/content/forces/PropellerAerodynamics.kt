@@ -12,6 +12,7 @@ import kotlin.math.*
 internal object PropellerAerodynamics {
     private const val EPSILON = 1e-12
     private const val PROFILE_DRAG = 0.01
+    private val sailTrimPitch = Math.toRadians(4.0)
     private val stallStart = Math.toRadians(12.0)
     private val stallEnd = Math.toRadians(30.0)
     private val gaussNodes = doubleArrayOf(-1.0 / sqrt(3.0), 1.0 / sqrt(3.0))
@@ -178,41 +179,57 @@ internal object PropellerAerodynamics {
                 .add(flow.angularVelocityWorld.cross(leverWorld, Vector3d())).add(spinVelocity)
         }
 
+        val densities = DoubleArray(elements.size) { index ->
+            val pointWorld = flow.modelToWorld.transformPosition(Vector3d(hub).add(elements[index].offset))
+            flow.densityAtHeight(pointWorld.y)
+        }
+
         // Store collective in the normal rotation setting's handedness. Mirroring only
         // the physical pitch keeps startup and live setting changes consistent too.
         val sailPitchSign = if (prop.inverted) -1.0 else 1.0
         if (prop.brass && elements.isNotEmpty()) {
             val rotationSign = if (omega < 0.0) -1.0 else 1.0
             var inflow = 0.0
-            for (element in elements) {
+            var totalWeight = 0.0
+            for ((index, element) in elements.withIndex()) {
                 val velocity = velocityAt(element.offset)
-                val spanWorld = flow.modelToWorld.transformDirection(element.span, Vector3d()).normalize()
+                val spanWorld = flow.modelToWorld.transformDirection(element.span, Vector3d())
                 val tangentWorld = flow.modelToWorld.transformDirection(element.tangent, Vector3d())
+                val area = spanWorld.cross(tangentWorld, Vector3d()).length()
+                spanWorld.normalize()
                 tangentWorld.sub(Vector3d(spanWorld).mul(tangentWorld.dot(spanWorld))).normalize()
                 val normalWorld = spanWorld.cross(tangentWorld, Vector3d())
-                inflow += atan2(velocity.dot(normalWorld) * rotationSign, max(abs(velocity.dot(tangentWorld)), 1e-6))
+                val tangentSpeed = abs(velocity.dot(tangentWorld))
+                val axialSpeed = velocity.dot(normalWorld) * rotationSign * sailPitchSign
+                // Axial lift sensitivity: dynamic pressure times the lift's axial projection.
+                // Equal weighting lets slow inner sails over-pitch the stronger outer sails.
+                val weight = densities[index] * area * tangentSpeed * hypot(tangentSpeed, axialSpeed)
+                if (weight.isFinite() && weight > 0.0) {
+                    inflow += weight * atan2(axialSpeed, tangentSpeed)
+                    totalWeight += weight
+                }
             }
-            // Follow the airflow with a 4-degree mean angle of attack. Clamping absolute
-            // pitch creates an artificial thrust cliff as inflow crosses that limit;
-            // stall and drag depend on each section's angle to the air, not the rotor plane.
-            // atan2 above already bounds the target to -86..94 degrees for finite flow.
-            val targetPitch = sailPitchSign * inflow / elements.size + Math.toRadians(4.0)
+            val meanInflow = if (totalWeight > EPSILON && totalWeight.isFinite() && inflow.isFinite()) inflow / totalWeight else 0.0
+            // Retain damping near hover while continuing to follow airflow at cruise.
+            // The cosine compensates for increasing section airspeed; the smooth trim
+            // reduction retains 75% of the lift target in forward flight, without a pitch cap.
+            val trim = sailTrimPitch * cos(meanInflow) * (1.0 - 0.25 * tanh(meanInflow / (2.0 * sailTrimPitch)))
+            val targetPitch = meanInflow + trim
             // One collective update per rotor, independent of sail count and iteration order.
-            if (!prop.currentBladePitch.isFinite()) prop.currentBladePitch = Math.toRadians(4.0)
+            if (!prop.currentBladePitch.isFinite()) prop.currentBladePitch = sailTrimPitch
             prop.currentBladePitch += 0.05 * (targetPitch - prop.currentBladePitch)
         }
 
         val sections = ArrayList<Section>(elements.size)
-        for (element in elements) {
+        for ((index, element) in elements.withIndex()) {
             val pitch = if (prop.brass) sailPitchSign * prop.currentBladePitch else element.pitch
             val spanWorld = flow.modelToWorld.transformDirection(Vector3d(element.span).mul(element.spanLength))
             val chordWorld = flow.modelToWorld.transformDirection(
                 Vector3d(element.tangent).mul(cos(pitch)).add(Vector3d(axis).mul(sin(pitch))).mul(element.chordLength)
             )
             val pointModel = Vector3d(hub).add(element.offset)
-            val pointWorld = flow.modelToWorld.transformPosition(pointModel, Vector3d())
             val velocity = velocityAt(element.offset)
-            val response = sectionResponse(velocity, spanWorld, chordWorld, flow.densityAtHeight(pointWorld.y))
+            val response = sectionResponse(velocity, spanWorld, chordWorld, densities[index])
                 .scale(forceMultiplier)
             val elementForce = response.transform(velocity, Vector3d())
             val leverWorld = flow.modelToWorld.transformDirection(pointModel.sub(flow.centerOfMassModel))
