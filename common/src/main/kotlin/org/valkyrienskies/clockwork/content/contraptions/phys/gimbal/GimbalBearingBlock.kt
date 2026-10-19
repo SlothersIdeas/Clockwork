@@ -113,9 +113,12 @@ class GimbalBearingBlock(properties: Properties) : BearingBlock(properties), IBE
 
     override fun getShape(state: BlockState, worldIn: BlockGetter, pos: BlockPos, context: CollisionContext): VoxelShape {
         return when (state.getValue(FACING)) {
-            Direction.NORTH, Direction.SOUTH -> box(2.0,2.0,6.0,14.0,14.0,10.0)
-            Direction.EAST, Direction.WEST -> box(6.0,2.0,2.0,10.0,14.0,14.0)
-            Direction.UP, Direction.DOWN -> box(2.0,6.0,2.0,14.0,10.0,14.0)
+            Direction.NORTH  -> box(2.0,2.0,6.0,14.0,14.0,16.0)
+            Direction.SOUTH -> box(2.0,2.0,0.0,14.0,14.0,10.0)
+            Direction.EAST -> box(0.0,2.0,2.0,10.0,14.0,14.0)
+            Direction.WEST -> box(6.0,2.0,2.0,16.0,14.0,14.0)
+            Direction.UP -> box(2.0,0.0,2.0,14.0,10.0,14.0)
+            Direction.DOWN -> box(2.0,6.0,2.0,14.0,16.0,14.0)
         }
     }
 
