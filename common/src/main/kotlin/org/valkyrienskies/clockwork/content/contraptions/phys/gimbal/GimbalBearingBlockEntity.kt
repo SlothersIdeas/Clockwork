@@ -236,7 +236,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         target: KineticBlockEntity, stateFrom: BlockState, stateTo: BlockState, diff: BlockPos,
         connectedViaAxes: Boolean, connectedViaCogs: Boolean
     ): Float {
-        if (joint == null || target.blockPos != Vector3d(bearingPosInSub).floor().toMinecraft()) return 0f
+        if (joint == null || target.blockPos != Vector3d(bearingPosInSub).add(originalDirection?.normal?.toJOMLD() ?: Vector3d()).floor().toMinecraft()) return 0f
 
         return 1f
     }
@@ -246,7 +246,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         state: BlockState,
         neighbours: MutableList<BlockPos>
     ): List<BlockPos> {
-        if (joint != null) neighbours.add(Vector3d(bearingPosInSub).floor().toMinecraft())
+        if (joint != null) neighbours.add(Vector3d(bearingPosInSub).add(originalDirection?.normal?.toJOMLD() ?: Vector3d()).floor().toMinecraft())
         return neighbours
     }
 
