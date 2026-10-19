@@ -3,6 +3,8 @@ package org.valkyrienskies.clockwork.content.contraptions.phys.infuser
 
 import com.simibubi.create.foundation.block.IBE
 import net.minecraft.core.BlockPos
+import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.Containers
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.player.Player
@@ -43,7 +45,8 @@ class PhysicsInfuserBlock(properties: Properties) : Block(properties),
 
         // 1. Lock interactions while assembling animation is active
         if (blockEntity.assembling) {
-            return InteractionResult.CONSUME
+            if (!worldIn.isClientSide) blockEntity.skipAssembly()
+            return InteractionResult.sidedSuccess(worldIn.isClientSide)
         }
 
         val heldStack = player.getItemInHand(handIn)
@@ -73,7 +76,7 @@ class PhysicsInfuserBlock(properties: Properties) : Block(properties),
         // 4. Right Click with Empty Hand: Start Assembly Sequence (if wand present)
         if (hasWand && heldStack.isEmpty) {
             if (!worldIn.isClientSide) {
-                blockEntity.startAssembly()
+                blockEntity.startAssembly(player as? ServerPlayer)
             }
             return InteractionResult.sidedSuccess(worldIn.isClientSide)
         }
@@ -90,9 +93,19 @@ class PhysicsInfuserBlock(properties: Properties) : Block(properties),
         movedByPiston: Boolean
     ) {
         super.neighborChanged(state, level, pos, neighborBlock, neighborPos, movedByPiston)
-        if (level.isClientSide || !level.hasNeighborSignal(pos)) return
+        if (level.isClientSide) return
         val blockEntity = level.getBlockEntity(pos) as? PhysicsInfuserBlockEntity ?: return
-        blockEntity.assemble()
+        blockEntity.redstoneChanged()
+    }
+
+    override fun onRemove(state: BlockState, level: Level, pos: BlockPos, next: BlockState, moved: Boolean) {
+        if (!state.`is`(next.block)) {
+            if (!level.isClientSide && !moved) {
+                val be = level.getBlockEntity(pos) as? PhysicsInfuserBlockEntity
+                if (be != null) Containers.dropContents(level, pos, be)
+            }
+            super.onRemove(state, level, pos, next, moved)
+        }
     }
 
     // Voxelshape Hell

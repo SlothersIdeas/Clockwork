@@ -1,4 +1,12 @@
 {
+  "advancement.vs_clockwork.infuser.awakening": "Awakening",
+  "advancement.vs_clockwork.infuser.awakening.description": "Activate a Physics Infuser.",
+  "message.vs_clockwork.infuser.empty": "The wand has no eligible blocks selected. Check the selection and the infuser blacklist.",
+  "message.vs_clockwork.infuser.dimension": "This wand's selection is in another dimension.",
+  "message.vs_clockwork.infuser.large": "The infuser can assemble up to 100,000 selected blocks at once.",
+  "message.vs_clockwork.infuser.regions": "The infuser can assemble up to 128 disconnected regions at once.",
+  "message.vs_clockwork.infuser.unloaded": "Keep all selected regions loaded and within the world's build height.",
+  "message.vs_clockwork.infuser.failed": "The infuser could not assemble a region. See the server log for details.",
   "itemGroup.clockwork": "Clockwork",
   "itemGroup.vs_clockwork": "Clockwork",
   "itemGroup.vs_clockwork.physicalities": "Clockwork Physicalities",

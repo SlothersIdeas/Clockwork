@@ -8,13 +8,10 @@ import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.MultiBufferSource
 import org.valkyrienskies.clockwork.ClockworkModClient
 import org.valkyrienskies.clockwork.content.curiosities.tools.gravitron.GravitronEffects
+import org.valkyrienskies.clockwork.content.contraptions.phys.infuser.InfuserEffects
 
-/** Draw world-space tool effects after vanilla translucency, before shader-pack postprocessing. */
+/** Draw world-space tool effects after vanilla translucency, before shader postprocessing. */
 object ToolWorldEffects {
-    // Iris/Oculus replaces Minecraft's shared BufferSource with an entity batcher whose
-    // endBatch(RenderType) is a no-op, even with packs disabled. Late geometry can survive
-    // until the next entity flush and be covered by that frame's water. Own an immediate
-    // source so ribbons, overlays and markers really finish at this point in the frame.
     private val buffers = MultiBufferSource.immediate(BufferBuilder(262144))
 
     @JvmStatic
@@ -22,13 +19,12 @@ object ToolWorldEffects {
         val mc = Minecraft.getInstance()
         if (mc.level == null || ShaderPackCompat.shadowPass()) return
 
-        // MAIN_TARGET's RenderStateShard is a no-op. Explicitly choose the main target
-        // without packs; with packs, their vanilla shader overrides select the correct FBO.
         if (!ShaderPackCompat.enabled()) mc.mainRenderTarget.bindWrite(false)
         poseStack.pushPose()
         try {
             ClockworkModClient.WANDERWAND_EFFECT_RENDERER.render(poseStack, buffers, camera.position, partialTick)
             GravitronEffects.render(poseStack, buffers, partialTick)
+            InfuserEffects.render(poseStack, buffers, camera.position, partialTick)
             buffers.endBatch()
         } finally {
             RenderSystem.enableCull()
