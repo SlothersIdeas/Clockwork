@@ -171,39 +171,23 @@ object ClockworkBlocks {
             .register()
 
     @JvmField
-    val PHYS_BEARING: BlockEntry<PhysBearingBlock> =
-        REGISTRATE.block("phys_bearing") { properties: BlockBehaviour.Properties? ->
-            PhysBearingBlock(properties!!)
+    val GIMBAL_BEARING: BlockEntry<GimbalBearingBlock> =
+        REGISTRATE.block("gimbal_bearing") { properties: BlockBehaviour.Properties? ->
+            GimbalBearingBlock(properties!!)
         }
             .initialProperties { SharedProperties.stone() }
             .transform(axeOrPickaxe())
-            .transform(displaySource(ClockworkDisplaySources.PHYS_BEARING))
             .properties {
                 it.lightLevel { state: BlockState? -> PhysBearingBlock.getLight(state) }
             }
             .addLayer { Supplier { RenderType.cutout() } }
-            .blockstate { c: DataGenContext<Block?, PhysBearingBlock>, p: RegistrateBlockstateProvider ->
+            .blockstate { c: DataGenContext<Block?, GimbalBearingBlock>, p: RegistrateBlockstateProvider ->
                 p.directionalBlock(c.entry, AssetLookup.partialBaseModel(c, p))
             }
             .tag(AllTags.AllBlockTags.SAFE_NBT.tag)
             .item()
             .tab(ClockworkMod.PHYSICAL_CREATIVE_TABINFO)
-            .model(AssetLookup.customBlockItemModel("phys_bearing"))
-            .build()
-            .register()
-
-    @JvmField
-    val GIMBAL_BEARING: BlockEntry<GimbalBearingBlock> =
-        REGISTRATE.block<GimbalBearingBlock>("gimbal_bearing") { properties: BlockBehaviour.Properties? ->
-            GimbalBearingBlock(properties!!)
-        }
-            .initialProperties { SharedProperties.stone() }
-            .transform(axeOrPickaxe())
-            .properties { it.noOcclusion() }
-            .addLayer { Supplier { RenderType.cutout() } }
-            .tag(AllTags.AllBlockTags.SAFE_NBT.tag)
-            .item()
-            .tab(ClockworkMod.PHYSICAL_CREATIVE_TABINFO)
+            .model(AssetLookup.customBlockItemModel("gimbal_bearing"))
             .build()
             .register()
 
@@ -426,15 +410,36 @@ object ClockworkBlocks {
         .register()
 
     @JvmField
+    val PHYS_BEARING: BlockEntry<PhysBearingBlock> =
+        REGISTRATE.block("phys_bearing") { properties: BlockBehaviour.Properties? ->
+            PhysBearingBlock(properties!!)
+        }
+            .initialProperties { SharedProperties.stone() }
+            .transform(axeOrPickaxe())
+            .transform(displaySource(ClockworkDisplaySources.PHYS_BEARING))
+            .properties {
+                it.lightLevel { state: BlockState? -> PhysBearingBlock.getLight(state) }
+            }
+            .addLayer { Supplier { RenderType.cutout() } }
+            .blockstate { c: DataGenContext<Block?, PhysBearingBlock>, p: RegistrateBlockstateProvider ->
+                p.directionalBlock(c.entry, AssetLookup.partialBaseModel(c, p))
+            }
+            .tag(AllTags.AllBlockTags.SAFE_NBT.tag)
+            .item()
+            .tab(ClockworkMod.PHYSICAL_CREATIVE_TABINFO)
+            .model(AssetLookup.customBlockItemModel("phys_bearing"))
+            .build()
+            .register()
+
+
+    @JvmField
     val PHYSICS_INFUSER: BlockEntry<PhysicsInfuserBlock> =
         REGISTRATE.block("physics_infuser") { properties: BlockBehaviour.Properties? ->
             PhysicsInfuserBlock(properties!!)
         }
-            .transform(
-                axeOrPickaxe()
-            )
-
-            .addLayer { Supplier { RenderType.cutout() } }
+            .initialProperties { SharedProperties.stone() }
+            .transform(axeOrPickaxe())
+            .addLayer { Supplier { RenderType.translucent() } }
             .tag(AllTags.AllBlockTags.SAFE_NBT.tag)
             .item()
             .tab(ClockworkMod.PHYSICAL_CREATIVE_TABINFO)
@@ -1100,7 +1105,7 @@ object ClockworkBlocks {
         }
             .initialProperties { SharedProperties.stone() }
             .transform(axeOrPickaxe())
-            .properties { it.forceSolidOn().noOcclusion() }
+            .properties { it.noOcclusion() }
             .addLayer { Supplier { RenderType.cutout() } }
             .tag(AllTags.AllBlockTags.SAFE_NBT.tag)
             .item()

@@ -1,6 +1,5 @@
 package org.valkyrienskies.clockwork.content.contraptions.phys.infuser
 
-
 import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
 import net.minecraft.core.NonNullList
@@ -14,23 +13,23 @@ import org.valkyrienskies.clockwork.platform.api.network.S2CCWPacket
 
 class PhysicsInfuserSyncPacket : S2CCWPacket {
     override var player: Player? = null
-    private var inventoryPacket: NonNullList<ItemStack>? = null
+    private var inventoryPacket: NonNullList<ItemStack>
     private val pos: BlockPos
 
     constructor(buf: FriendlyByteBuf) {
-        val nbt = buf.readNbt()
-        if (nbt != null) {
-            inventoryPacket = NonNullList.withSize(1, ItemStack.EMPTY)
-            ContainerHelper.loadAllItems(nbt, inventoryPacket)
-        } else {
-            inventoryPacket = NonNullList.withSize(1, ItemStack.EMPTY)
-        }
+        // FIXED: Read pos first to match write()
         pos = buf.readBlockPos()
+
+        val nbt = buf.readNbt()
+        inventoryPacket = NonNullList.withSize(1, ItemStack.EMPTY)
+        if (nbt != null) {
+            ContainerHelper.loadAllItems(nbt, inventoryPacket)
+        }
     }
 
     constructor(tile: PhysicsInfuserBlockEntity) {
         inventoryPacket = tile.inventory
-        pos = tile.getBlockPos()
+        pos = tile.blockPos
     }
 
     override fun write(buffer: FriendlyByteBuf) {
@@ -42,16 +41,9 @@ class PhysicsInfuserSyncPacket : S2CCWPacket {
 
     override fun handle(context: ClientNetworkContext) {
         context.enqueueWork {
-            if (Minecraft.getInstance().level != null && Minecraft.getInstance().level!!.getBlockEntity(
-                    pos
-                ) is PhysicsInfuserBlockEntity
-            ) {
-                val ce =
-                    Minecraft.getInstance().level!!.getBlockEntity(pos) as PhysicsInfuserBlockEntity?
-                if (ce != null) {
-                    ce.inventory = inventoryPacket
-                }
-            }
+            val level = Minecraft.getInstance().level ?: return@enqueueWork
+            val blockEntity = level.getBlockEntity(pos) as? PhysicsInfuserBlockEntity ?: return@enqueueWork
+            blockEntity.inventory = inventoryPacket
         }
         context.setPacketHandled(true)
     }

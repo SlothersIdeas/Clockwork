@@ -208,8 +208,8 @@ object ClockworkConfig {
         @ConfigEntry(description = "Maximum range (in blocks) the survival gravitron will interact with ships", min = 1.0, max = 1000.0)
         var survivalGravitronMaxRange = 20.0
 
-        @ConfigEntry(description = "The density mult of wanderlite ore in meteors", min = 0.0)
-        val meteor_density = 0.0
+        @ConfigEntry(description = "The density multiplier of wanderlite ore in meteors", min = 0.0, max = 1.0)
+        val meteorDensity = 0.0125
 
         @ConfigEntry(description = "Maximum amount of blocks a flap bearing can assemble", min = 0.0, max = Int.MAX_VALUE.toDouble())
         var flapBearingMaxSize = 16

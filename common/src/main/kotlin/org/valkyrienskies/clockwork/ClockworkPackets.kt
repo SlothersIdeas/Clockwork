@@ -8,7 +8,9 @@ import net.minecraft.world.level.Level
 import org.valkyrienskies.clockwork.client.render.BladeAngleSyncPacket
 import org.valkyrienskies.clockwork.client.render.airpocket.AirpocketSyncPacket
 import org.valkyrienskies.clockwork.content.contraptions.flap.smart_flap.FlapLinkedControllerBindPacket
+import org.valkyrienskies.clockwork.content.contraptions.phys.gimbal.quad_link.GimbalLinkedControllerBindPacket
 import org.valkyrienskies.clockwork.content.curiosities.altmeter.UpdateAltMeterPacket
+import org.valkyrienskies.clockwork.content.curiosities.meteor.MeteorShipSyncPacket
 import org.valkyrienskies.clockwork.content.contraptions.phys.infuser.PhysicsInfuserSyncPacket
 import org.valkyrienskies.clockwork.content.contraptions.phys.slicker.SlickerAttachmentSyncPacket
 import org.valkyrienskies.clockwork.content.curiosities.tools.gravitron.GravitronDisassemblyPacket
@@ -88,6 +90,8 @@ enum class ClockworkPackets(
     AIRPOCKET_SYNC_PACKET(AirpocketSyncPacket::class.java, ::AirpocketSyncPacket),
 
     FLAP_LINKED_CONTROLLER_BIND_PACKET(FlapLinkedControllerBindPacket::class.java, ::FlapLinkedControllerBindPacket),
+    GIMBAL_LINKED_CONTROLLER_BIND_PACKET(GimbalLinkedControllerBindPacket::class.java, ::GimbalLinkedControllerBindPacket),
+    METEOR_SHIP_SYNC(MeteorShipSyncPacket::class.java, ::MeteorShipSyncPacket),
     GRAVITRON_ANIMATION_PACKET(GravitronAnimationPacket::class.java, ::GravitronAnimationPacket),
     GRAVITRON_FREEZE_PACKET(GravitronFreezePacket::class.java, ::GravitronFreezePacket),
     WAND_STATE_PACKET(WanderwandStatePacket::class.java, ::WanderwandStatePacket),

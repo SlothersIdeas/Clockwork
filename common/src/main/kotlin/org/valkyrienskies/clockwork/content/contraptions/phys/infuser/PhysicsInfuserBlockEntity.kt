@@ -4,6 +4,7 @@ package org.valkyrienskies.clockwork.content.contraptions.phys.infuser
 import com.simibubi.create.content.contraptions.AssemblyException
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour
+import net.createmod.catnip.animation.AnimationTickHolder
 import net.createmod.catnip.animation.LerpedFloat
 import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
@@ -24,6 +25,7 @@ import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.phys.Vec3
 import org.joml.Vector3d
 import org.valkyrienskies.clockwork.ClockworkConfig
+import org.valkyrienskies.clockwork.ClockworkItems
 import org.valkyrienskies.clockwork.ClockworkPackets
 import org.valkyrienskies.clockwork.ClockworkSounds
 import org.valkyrienskies.clockwork.client.render.scanner.ScannerRenderer
@@ -157,22 +159,19 @@ class PhysicsInfuserBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state
         val rand = level!!.getRandom()
         //client sounds
         if (assembling) {
-            if (skippingAssembly && assemblyProgress.value < 455) assemblyProgress.setValue(455.0)
+            if (skippingAssembly && assemblyProgress.value < 160) assemblyProgress.setValue(200.0)
 
-            if (assemblyProgress.value == 0f) {
-                playInitializeSound(level!!, thisposition)
-            }
-            if (assemblyProgress.value == 100f) {
+            if (assemblyProgress.value == 1f) {
                 playWindupSound(level!!, thisposition)
             }
-            if (assemblyProgress.value == 160f || assemblyProgress.value == 220f || assemblyProgress.value == 240f || assemblyProgress.value == 300f || assemblyProgress.value == 320f || assemblyProgress.value == 360f || assemblyProgress.value == 400f || assemblyProgress.value == 410f || assemblyProgress.value == 420f) {
+            if (assemblyProgress.value == 80f || assemblyProgress.value == 110f || assemblyProgress.value == 130f || assemblyProgress.value == 140f || assemblyProgress.value == 150f) {
                 playZapSound(level!!, thisposition, rand)
             }
-            if (assemblyProgress.value == 455f) {
+            if (assemblyProgress.value == 160f) {
+                playFinishSound(level!!, thisposition)
                 assemble()
             }
-            if (assemblyProgress.value == 460f) {
-                playFinishSound(level!!, thisposition)
+            if (assemblyProgress.value == 161f) {
                 if (level!!.isClientSide) {
                     for (cship in createdShips) {
                         ScannerRenderer.INSTANCE.ping(cship as ClientShip, thisposition, this)
@@ -180,7 +179,7 @@ class PhysicsInfuserBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state
                     }
                 }
             }
-            if (assemblyProgress.value == 500f) {
+            if (assemblyProgress.value >= 200f) {
                 resetAfterAssemble()
             }
         }
@@ -194,7 +193,7 @@ class PhysicsInfuserBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state
         animationType = Animation.IDLE
         startAnimation(Animation.IDLE)
         assemblyProgress.startWithValue(0.0)
-        useCooldown = 400
+        useCooldown = 20
         shouldEjectDesignator = true
     }
 
@@ -369,22 +368,8 @@ class PhysicsInfuserBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state
         )
     }
 
-    fun getCoreOffset(partialTicks: Float): Float {
-        if (animationType == Animation.IDLE) {
-            return 0f
-        } else if (animationType == Animation.ASSEMBLY) {
-            val runningTicks = Math.abs(assemblyProgress.value).toInt()
-            val prevRunningTicks = Math.abs(assemblyProgress.value - 1).toInt()
-            val ticks = Mth.lerp(partialTicks, prevRunningTicks.toFloat(), runningTicks.toFloat())
-            return if (runningTicks < ASSEMBLY_TIME * 3 / 4) {
-                Mth.clamp(Math.pow((ticks / ASSEMBLY_TIME * 3).toDouble(), 4.0), 0.0, 1.0).toFloat()
-            } else {
-                Mth.clamp(easeInBounce(Mth.clamp((ASSEMBLY_TIME - ticks) / ASSEMBLY_TIME * 8, 0f, 1f)), 0.0f, 1.0f)
-            }
-        } else if (animationType == Animation.DISASSEMBLY) {
-            return disassemblyProgress.getValue(partialTicks)
-        }
-        return 0f
+    fun getAnimationProgress(): Float {
+        return Mth.lerp(AnimationTickHolder.getPartialTicks(), assemblyProgress.value-1, assemblyProgress.value)/20
     }
 
     public override fun write(compound: CompoundTag, clientPacket: Boolean) {
@@ -424,8 +409,6 @@ class PhysicsInfuserBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state
     }
 
     companion object {
-        const val ASSEMBLY_TIME = 500
-        const val DISASSEMBLY_TIME = 1000
         fun playInitializeSound(world: Level, location: Vec3) {
             ClockworkSounds.PHYSICS_INFUSER_INITIALIZE.playAt(world, location, 0.5f, 1f, false)
         }
@@ -435,12 +418,12 @@ class PhysicsInfuserBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state
         }
 
         fun playZapSound(world: Level, location: Vec3, rand: RandomSource) {
-            val pitch = 0.6f + rand.nextFloat() * 0.4f
-            ClockworkSounds.PHYSICS_INFUSER_LIGHTNING.playAt(world, location, 0.5f, 1f, false)
+            val pitch = 1f + rand.nextFloat() * 0.4f
+            ClockworkSounds.PHYSICS_INFUSER_LIGHTNING.playAt(world, location, 1f, pitch, false)
         }
 
         fun playFinishSound(world: Level, location: Vec3) {
-            ClockworkSounds.PHYSICS_INFUSER_FINISH.playAt(world, location, 0.5f, 1f, false)
+            ClockworkSounds.PHYSICS_INFUSER_FINISH.playAt(world, location, 0.5f, 1f, true)
         }
 
         fun spawnParticlesAssembly(world: Level, pos: Vec3, rand: Random) {

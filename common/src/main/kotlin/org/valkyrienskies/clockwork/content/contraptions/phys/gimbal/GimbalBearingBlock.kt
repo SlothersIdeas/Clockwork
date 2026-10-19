@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.shapes.CollisionContext
 import net.minecraft.world.phys.shapes.VoxelShape
@@ -109,6 +110,14 @@ class GimbalBearingBlock(properties: Properties) : BearingBlock(properties), IBE
     override fun getBlockEntityClass(): Class<GimbalBearingBlockEntity> = GimbalBearingBlockEntity::class.java
     override fun getBlockEntityType(): BlockEntityType<out GimbalBearingBlockEntity> = ClockworkBlockEntities.GIMBAL_BEARING.get()
     override fun getRotationAxis(state: BlockState): Direction.Axis = state.getValue(FACING).axis
+
+    override fun getShape(state: BlockState, worldIn: BlockGetter, pos: BlockPos, context: CollisionContext): VoxelShape {
+        return when (state.getValue(FACING)) {
+            Direction.NORTH, Direction.SOUTH -> box(2.0,2.0,6.0,14.0,14.0,10.0)
+            Direction.EAST, Direction.WEST -> box(6.0,2.0,2.0,10.0,14.0,14.0)
+            Direction.UP, Direction.DOWN -> box(2.0,6.0,2.0,14.0,10.0,14.0)
+        }
+    }
 
     override fun hasShaftTowards(world: LevelReader, pos: BlockPos, state: BlockState, face: Direction): Boolean {
         return face.axis == state.getValue(FACING).axis
