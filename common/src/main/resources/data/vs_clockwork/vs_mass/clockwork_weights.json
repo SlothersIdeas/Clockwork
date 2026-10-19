@@ -15,8 +15,7 @@
   },
   {
     "block": "vs_clockwork:gimbal_bearing",
-    "mass": 150,
-    "no_collision": true
+    "mass": 150
   },
   {
     "block": "vs_clockwork:gyro",
