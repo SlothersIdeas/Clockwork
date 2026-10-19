@@ -877,7 +877,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         Vector3d(worldPosition.center.toJOML())
 
     private fun getSubJointAnchorLocal(): Vector3d =
-        Vector3d(bearingPosInSub)
+        Vector3d(bearingPosInSub).fma(-0.15, bearingAxisLocal)
 
     private fun getControllerTargetLimitRad(): Double {
         val physicalLimitRad = Math.toRadians(getMaxAngleDeg().toDouble())
