@@ -12,6 +12,7 @@ import com.simibubi.create.content.kinetics.transmission.sequencer.SequencerInst
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour
 import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollOptionBehaviour
 import com.simibubi.create.foundation.utility.ServerSpeedProvider
+import net.createmod.catnip.animation.AnimationTickHolder
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.nbt.CompoundTag
@@ -29,6 +30,7 @@ import org.joml.Vector3dc
 import org.valkyrienskies.clockwork.ClockworkConfig
 import org.valkyrienskies.clockwork.ClockworkMod.MOD_ID
 import org.valkyrienskies.clockwork.ClockworkSounds
+import org.valkyrienskies.clockwork.content.contraptions.flap.dual_link.DualLinkBehaviour
 import org.valkyrienskies.clockwork.content.forces.contraption.BearingController.Companion.getAngle
 import org.valkyrienskies.clockwork.content.forces.contraption.BearingData
 import org.valkyrienskies.clockwork.content.forces.contraption.BearingController
@@ -133,6 +135,7 @@ class PhysBearingBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state: B
     // For the visuals
     private var open = false
     private var opening = false
+    private var preOpenProgress = 0f
     private var openProgress = 0f
     private var inOutCorner = 0f
     private var cornerShrinking = false
@@ -167,12 +170,12 @@ class PhysBearingBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state: B
         if (isRunning && !open && !opening) {
             opening = true
         }
-        if (opening && isRunning && openProgress < 1.0f) {
+        if (opening && isRunning && openProgress < 1.35f) {
             openProgress += 0.05f
-        } else if (openProgress >= 1.0f) {
+        } else if (openProgress >= 1.35f) {
             opening = false
             open = true
-            openProgress = 1f
+            openProgress = 1.35f
         }
 
         if (!isRunning && openProgress > 0.0f) {
@@ -213,14 +216,8 @@ class PhysBearingBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state: B
         )
     }
 
-    fun getWingRotOffset(): Float {
-        val openProgressMax = 70f
-        return when {
-            isRunning && open -> openProgressMax.toDouble().toFloat()
-            isRunning -> Mth.lerp(openProgress.toDouble(), 0.0, openProgressMax.toDouble()).toFloat()
-            !isRunning && open -> Mth.lerp(openProgress.toDouble(), 1.0, openProgressMax.toDouble()).toFloat()
-            else -> 0.0f
-        }
+    fun getAnimProgress(): Float {
+        return Mth.lerp(AnimationTickHolder.getPartialTicks(), preOpenProgress, openProgress)
     }
 
     private fun movementModeChanged(value: Int) {
@@ -510,6 +507,7 @@ class PhysBearingBlockEntity(type: BlockEntityType<*>?, pos: BlockPos?, state: B
         }
 
         if (level!!.isClientSide) {
+            preOpenProgress = openProgress
             tickAnimationLogic()
             return
         }

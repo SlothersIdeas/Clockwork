@@ -1,29 +1,33 @@
 package org.valkyrienskies.clockwork.content.contraptions.phys.gimbal
 
-import com.simibubi.create.content.contraptions.AbstractContraptionEntity
-import com.simibubi.create.content.contraptions.AssemblyException
-import com.simibubi.create.content.contraptions.ControlledContraptionEntity
-import com.simibubi.create.content.contraptions.IDisplayAssemblyExceptions
+import com.simibubi.create.Create
+import com.simibubi.create.content.contraptions.*
 import com.simibubi.create.content.contraptions.bearing.BearingBlock
 import com.simibubi.create.content.contraptions.bearing.IBearingBlockEntity
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity
-import com.simibubi.create.content.contraptions.DirectionalExtenderScrollOptionSlot
 import com.simibubi.create.content.kinetics.base.IRotate
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity
+import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer
+import com.simibubi.create.content.redstone.link.RedstoneLinkNetworkHandler
 import com.simibubi.create.foundation.blockEntity.behaviour.BehaviourType
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour
 import com.simibubi.create.foundation.blockEntity.behaviour.ValueBoxTransform
 import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollOptionBehaviour
 import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollValueBehaviour
+import net.createmod.catnip.animation.AnimationTickHolder
+import net.createmod.catnip.math.VecHelper
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.util.Mth
 import net.minecraft.world.level.ClipContext
-import net.minecraft.world.level.block.entity.BlockEntity
+import net.minecraft.world.level.LevelAccessor
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
+import net.minecraft.world.phys.AABB
+import net.minecraft.world.phys.Vec3
 import org.joml.AxisAngle4d
 import org.joml.Quaterniond
 import org.joml.Vector3d
@@ -31,13 +35,14 @@ import org.joml.Vector3dc
 import org.valkyrienskies.clockwork.ClockworkConfig
 import org.valkyrienskies.clockwork.ClockworkMod.MOD_ID
 import org.valkyrienskies.clockwork.content.contraptions.phys.bearing.PhysBearingAssembler
-import org.valkyrienskies.clockwork.util.ClockworkConstants
+import org.valkyrienskies.clockwork.content.contraptions.phys.gimbal.quad_link.QuadLinkBehaviour
+import org.valkyrienskies.clockwork.util.*
 import org.valkyrienskies.clockwork.util.ClockworkUtils.getVector3d
 import org.valkyrienskies.clockwork.util.GlueAssembler.collectGlued
-import org.valkyrienskies.clockwork.util.findMatchingJointIds
-import org.valkyrienskies.clockwork.util.gtpa
-import org.valkyrienskies.clockwork.util.updateJoint
+import org.valkyrienskies.core.api.attachment.getAttachment
 import org.valkyrienskies.core.api.ships.PhysShip
+import org.valkyrienskies.core.api.ships.properties.ShipId
+import org.valkyrienskies.core.api.util.PhysTickOnly
 import org.valkyrienskies.core.api.world.PhysLevel
 import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.core.impl.bodies.properties.BodyTransformFactory
@@ -48,6 +53,7 @@ import org.valkyrienskies.core.internal.joints.VSJoint
 import org.valkyrienskies.core.internal.joints.VSJointPose
 import org.valkyrienskies.core.internal.joints.VSSphericalJoint
 import org.valkyrienskies.core.util.datastructures.DenseBlockPosSet
+import org.valkyrienskies.kelvin.util.KelvinExtensions.toMinecraft
 import org.valkyrienskies.mod.api.BlockEntityPhysicsListener
 import org.valkyrienskies.mod.common.*
 import org.valkyrienskies.mod.common.assembly.ShipAssembler.assembleToShip
@@ -56,14 +62,7 @@ import org.valkyrienskies.mod.common.util.SplittingDisablerAttachment
 import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toJOMLD
 import org.valkyrienskies.mod.common.world.clipIncludeShips
-import org.valkyrienskies.core.api.attachment.getAttachment
-import org.valkyrienskies.core.api.ships.ServerShip
-import org.valkyrienskies.core.api.ships.properties.ShipId
-import org.valkyrienskies.core.api.util.PhysTickOnly
-import org.valkyrienskies.kelvin.util.KelvinExtensions.toMinecraft
-import org.valkyrienskies.mod.api.getShipById
-import org.valkyrienskies.mod.common.assembly.ICopyableBlock
-import java.util.EnumMap
+import java.util.*
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -151,6 +150,10 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     private var lastStateChanged = 0
     private val cooldown = 20
 
+    private var prevAngle = 0f
+    private var coreAngle = 0f
+    private var previousCoreAngle = 0f
+
     private val facing: Direction
         get() = blockState.getValue(BlockStateProperties.FACING)
 
@@ -163,6 +166,16 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     fun getRenderBearingPosInSub(): Vector3d = Vector3d(bearingPosInSub)
 
     fun getRenderDirection(): Direction = originalDirection ?: facing
+
+    var firstReceivedSignal = 0
+    var secondReceivedSignal = 0
+
+    private val frequencySignals = IntArray(4)
+
+    private var link1: QuadLinkBehaviour? = null
+    private var link2: QuadLinkBehaviour? = null
+    private var link3: QuadLinkBehaviour? = null
+    private var link4: QuadLinkBehaviour? = null
 
     override fun addBehaviours(behaviours: MutableList<BlockEntityBehaviour>) {
         super.addBehaviours(behaviours)
@@ -185,14 +198,46 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         maxAngleBehaviour!!.withCallback { onMaxAngleChanged() }
         maxAngleBehaviour!!.value = DEFAULT_MAX_ANGLE_DEG
         behaviours.add(maxAngleBehaviour!!)
+
+        val redstone =
+
+        createGimbalLinks()
+        behaviours.add(link1!!)
+        behaviours.add(link2!!)
+        behaviours.add(link3!!)
+        behaviours.add(link4!!)
     }
+
+    private fun createGimbalLinks() {
+        val valueBoxes1 = ValueBoxTransform.Dual.makeSlots { first: Boolean -> GimbalBearingFrequencySlot(first, 1) }
+        val valueBoxes2 = ValueBoxTransform.Dual.makeSlots { first: Boolean -> GimbalBearingFrequencySlot(first, 2) }
+        val valueBoxes3 = ValueBoxTransform.Dual.makeSlots { first: Boolean -> GimbalBearingFrequencySlot(first, 3) }
+        val valueBoxes4 = ValueBoxTransform.Dual.makeSlots { first: Boolean -> GimbalBearingFrequencySlot(first, 4) }
+
+        link1 = QuadLinkBehaviour(this, valueBoxes1, { setFrequencySignal(1, it) }, 1)
+        link2 = QuadLinkBehaviour(this, valueBoxes2, { setFrequencySignal(2, it) }, 2)
+        link3 = QuadLinkBehaviour(this, valueBoxes3, { setFrequencySignal(3, it) }, 3)
+        link4 = QuadLinkBehaviour(this, valueBoxes4, { setFrequencySignal(4, it) }, 4)
+    }
+
+    fun setFrequencySignal(side: Int, power: Int) {
+        val index = (side - 1).coerceIn(0, 3)
+        frequencySignals[index] = power
+        if (side == 1) firstReceivedSignal = power
+        if (side == 2) secondReceivedSignal = power
+        updateRedstoneVector()
+    }
+
+    fun setFirstSignal(power: Int) = setFrequencySignal(1, power)
+
+    fun setSecondSignal(power: Int) = setFrequencySignal(2, power)
 
     //region Custom Propagation
     override fun propagateRotationTo(
         target: KineticBlockEntity, stateFrom: BlockState, stateTo: BlockState, diff: BlockPos,
         connectedViaAxes: Boolean, connectedViaCogs: Boolean
     ): Float {
-        if (joint == null || target.blockPos != Vector3d(bearingPosInSub).floor().toMinecraft()) return 0f
+        if (joint == null || target.blockPos != Vector3d(bearingPosInSub).add(originalDirection?.normal?.toJOMLD() ?: Vector3d()).floor().toMinecraft()) return 0f
 
         return 1f
     }
@@ -202,7 +247,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         state: BlockState,
         neighbours: MutableList<BlockPos>
     ): List<BlockPos> {
-        if (joint != null) neighbours.add(Vector3d(bearingPosInSub).floor().toMinecraft())
+        if (joint != null) neighbours.add(Vector3d(bearingPosInSub).add(originalDirection?.normal?.toJOMLD() ?: Vector3d()).floor().toMinecraft())
         return neighbours
     }
 
@@ -218,7 +263,36 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     }
 
     fun onNeighborChanged() {
+        refreshFrequencySignalsFromNetwork()
         updateRedstoneVector()
+    }
+
+    override fun getRenderBoundingBox(): AABB {
+        return AABB(worldPosition).inflate(0.5, 1.0, 0.5)
+    }
+
+    private fun refreshFrequencySignalsFromNetwork() {
+        val level = level ?: return
+        if (level.isClientSide) return
+
+        val links = listOfNotNull(link1, link2, link3, link4)
+        val networks = Create.REDSTONE_LINK_NETWORK_HANDLER.networksIn(level)
+        for (i in links.indices) {
+            val link = links[i]
+            val key = link.getNetworkKey()
+            val network = networks[key]
+            if (network == null) {
+                setFrequencySignal(i + 1, 0)
+                continue
+            }
+            var maxPower = 0
+            for (other in network) {
+                if (!other.isAlive()) continue
+                if (!RedstoneLinkNetworkHandler.withinRange(link, other)) continue
+                maxPower = maxOf(maxPower, other.getTransmittedStrength())
+            }
+            setFrequencySignal(i + 1, maxPower)
+        }
     }
 
     private fun updateRedstoneVector() {
@@ -226,6 +300,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         val pos = blockPos
         val facing = this.facing
         val v = Vector3d()
+
         for (dir in Direction.entries) {
             if (dir.axis == facing.axis) continue
             val signal = level.getSignal(pos.relative(dir), dir)
@@ -233,6 +308,15 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
             val n = dir.normal
             v.add(n.x.toDouble() * signal, n.y.toDouble() * signal, n.z.toDouble() * signal)
         }
+
+        for (slot in 1..4) {
+            val signal = frequencySignals[slot - 1]
+            if (signal <= 0) continue
+            val dir = GimbalBearingFrequencySlot.getSlotDirection(blockState, slot)
+            val n = dir.normal
+            v.add(n.x.toDouble() * signal, n.y.toDouble() * signal, n.z.toDouble() * signal)
+        }
+
         v.div(15.0)
         val len = v.length()
         if (len > 1.0) v.div(len)
@@ -404,6 +488,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         }
 
 
+        refreshFrequencySignalsFromNetwork()
         tryRestoreJointAfterLoad()
         tryAssembleNextTick()
         if (isRunning) sendData()
@@ -470,7 +555,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         val axis = direction.normal.toJOMLD()
         val shipOn = level.getShipObjectManagingPos(worldPosition)
         val ownerFaceAnchor = Vector3d(worldPos).fma(0.5, axis)
-        val ownerJointAnchor = Vector3d(ownerFaceAnchor)
+        val ownerJointAnchor = Vector3d(worldPos)
 
         val startPos = Vector3d(worldPos).fma(0.5, axis)
         val endPos = Vector3d(worldPos).fma(1.5, axis)
@@ -513,7 +598,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
             )
             event.unregister()
 
-            val newPos = Vector3d(ownerFaceAnchor).sub(centerPositions.first).add(centerPositions.second)
+            val newPos = Vector3d(ownerJointAnchor).sub(centerPositions.first).add(centerPositions.second)
             connectedShipId = ship.id
             Pair(newPos, ship)
         } else {
@@ -522,12 +607,12 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
                 otherPos.blockPos.x.toDouble() + 0.5,
                 otherPos.blockPos.y.toDouble() + 0.5,
                 otherPos.blockPos.z.toDouble() + 0.5
-            ).fma(-0.5, axis)
+            )
             Pair(bp, otherShip)
         }
 
         val shipOnID = shipOn?.id
-        val subJointAnchor = Vector3d(otherShipCenterPos).fma(-FACE_ATTACHMENT_OFFSET_BLOCKS, axis)
+        val subJointAnchor = Vector3d(otherShipCenterPos).fma(-0.15, axis)
 
         val posInWorld = shipOn?.transform?.shipToWorld?.transformPosition(
             Vector3d(ownerJointAnchor).sub(subJointAnchor).add(newOtherShip.inertiaData.centerOfMass), Vector3d()
@@ -593,7 +678,7 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         }
         val mainShip = level.getShipObjectManagingPos(worldPosition)
         val direction = originalDirection ?: blockState.getValue(BearingBlock.FACING)
-        val ownerAnchor = Vector3d(worldPosition.center.toJOML()).fma(0.5, bearingAxisLocal)
+        val ownerAnchor = Vector3d(worldPosition.center.toJOML())
 
         val targetRot = mainShip?.transform?.shipToWorldRotation?.let { Quaterniond(it) } ?: Quaterniond()
         val scaling = mainShip?.transform?.shipToWorldScaling ?: Vector3d(1.0, 1.0, 1.0)
@@ -789,10 +874,10 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     }
 
     private fun getOwnerJointAnchorLocal(): Vector3d =
-        Vector3d(worldPosition.center.toJOML()).fma(0.5, bearingAxisLocal)
+        Vector3d(worldPosition.center.toJOML())
 
     private fun getSubJointAnchorLocal(): Vector3d =
-        Vector3d(bearingPosInSub).fma(-FACE_ATTACHMENT_OFFSET_BLOCKS, bearingAxisLocal)
+        Vector3d(bearingPosInSub).fma(-0.15, bearingAxisLocal)
 
     private fun getControllerTargetLimitRad(): Double {
         val physicalLimitRad = Math.toRadians(getMaxAngleDeg().toDouble())
@@ -982,15 +1067,41 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
     private class ModeSlot : DirectionalExtenderScrollOptionSlot({ state, dir ->
         val facingAxis = state.getValue(BearingBlock.FACING).axis
         dir.axis != facingAxis && dir.axis != maxAngleAxisFor(facingAxis)
-    })
+    }) {
+        override fun getSouthLocation(): Vec3 {
+            return VecHelper.voxelSpace(8.0, 8.0, 14.0)
+        }
+
+        override fun getLocalOffset(level: LevelAccessor, pos: BlockPos, state: BlockState): Vec3 {
+            return super.getLocalOffset(level, pos, state)
+                .add(
+                    Vec3.atLowerCornerOf(state.getValue(BlockStateProperties.FACING).normal)
+                        .scale((2 / 16f).toDouble())
+                )
+        }
+
+        override fun getScale(): Float = 0.2f
+    }
 
 
     private class MaxAngleSlot : DirectionalExtenderScrollOptionSlot({ state, dir ->
-        dir.axis == maxAngleAxisFor(state.getValue(BearingBlock.FACING).axis)
-    })
+        dir.axis != state.getValue(BearingBlock.FACING).axis
+    }) {
+        override fun getSouthLocation(): Vec3 {
+            return VecHelper.voxelSpace(8.0, 8.0, 14.0)
+        }
 
+        override fun getLocalOffset(level: LevelAccessor, pos: BlockPos, state: BlockState): Vec3 {
+            return super.getLocalOffset(level, pos, state)
+                .add(
+                    Vec3.atLowerCornerOf(state.getValue(BlockStateProperties.FACING).normal)
+                        .scale((2 / 16f).toDouble())
+                )
+        }
 
-    // Had to make a separate behaviour so that packets routed to it
+        override fun getScale(): Float = 0.2f
+    }
+
     class MaxAngleScrollValueBehaviour(
         label: Component,
         be: com.simibubi.create.foundation.blockEntity.SmartBlockEntity,
@@ -1035,11 +1146,30 @@ class GimbalBearingBlockEntity(type: net.minecraft.world.level.block.entity.Bloc
         ).normalize()
     }
 
+    fun getInterpolatedCoreAngle(partialTicks: Float): Float {
+        previousCoreAngle = coreAngle
+        coreAngle++
+        if (coreAngle == 360f) {
+            coreAngle = 0f
+        }
+        return if (isVirtual) Mth.lerp(partialTicks + .5f, previousCoreAngle, coreAngle) else Mth.lerp(
+            partialTicks,
+            coreAngle,
+            coreAngle + 4f
+        )
+    }
+
+    fun getAngleForBe(be: KineticBlockEntity, pos: BlockPos?, axis: Direction.Axis?): Float {
+        val time = AnimationTickHolder.getRenderTime(be.getLevel())
+        val offset = KineticBlockEntityRenderer.getRotationOffsetForPosition(be, pos, axis)
+        val angle = ((time * be.getSpeed() * 3f / 10 + offset) % 360) / 180 * Math.PI.toFloat()
+        return angle
+    }
+
     companion object {
         const val DEFAULT_MAX_ANGLE_DEG = 45
-        const val MAX_ANGLE_LIMIT_DEG = 55
+        const val MAX_ANGLE_LIMIT_DEG = 60
         private const val MIN_LIMIT_RAD = 1e-3f
-        private const val FACE_ATTACHMENT_OFFSET_BLOCKS = 0.15
         private const val CONTROLLER_LIMIT_MARGIN_DEG = 1.0
         private const val CONTROLLER_LIMIT_MARGIN_FRACTION = 0.02
         private const val MIN_CONTROL_LEVER_ARM_BLOCKS = 0.15

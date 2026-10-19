@@ -20,6 +20,8 @@
     "content.exhaust.MixinAirCurrent",
     "content.flap_bearing.MixinLinkedControllerClientHandler",
     "content.flap_bearing.MixinLinkedControllerItem",
+    "content.gimbal_bearing.MixinGimbalLinkedControllerClientHandler",
+    "content.gimbal_bearing.MixinGimbalLinkedControllerItem",
     "content.gas.MixinBacktankUtil",
     "content.gas.MixinComposterBlock",
     "content.gas_engine.MixinSteamEngineBlock",

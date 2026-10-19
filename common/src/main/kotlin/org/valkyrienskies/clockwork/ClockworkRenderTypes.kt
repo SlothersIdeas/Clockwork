@@ -11,6 +11,10 @@ import net.minecraft.client.renderer.texture.TextureAtlas
 import org.valkyrienskies.clockwork.ClockworkShaders.crystal
 import org.valkyrienskies.clockwork.ClockworkShaders.haze
 import org.valkyrienskies.clockwork.ClockworkShaders.heat
+import org.valkyrienskies.clockwork.ClockworkShaders.meteorGlow
+import org.valkyrienskies.clockwork.ClockworkShaders.meteorHeatShield
+import org.valkyrienskies.clockwork.ClockworkShaders.meteorShieldDepth
+import org.valkyrienskies.clockwork.ClockworkShaders.meteorTrail
 import org.valkyrienskies.clockwork.platform.PlatformUtils
 import net.minecraft.client.renderer.MultiBufferSource
 import com.mojang.blaze3d.vertex.VertexConsumer
@@ -72,8 +76,9 @@ class ClockworkRenderTypes(
             true,
             CompositeState.builder()
                 .setShaderState(ShaderStateShard(::heat))
-                .setTransparencyState(NO_TRANSPARENCY)
-                .setCullState(CULL)
+                .setTextureState(TextureStateShard(TEX, false, false))
+                .setTransparencyState(ADDITIVE_TRANSPARENCY)
+                .setCullState(NO_CULL)
                 .setLightmapState(LIGHTMAP)
                 .setOverlayState(OVERLAY)
                 .setOutputState(TRANSLUCENT_TARGET)
@@ -89,10 +94,88 @@ class ClockworkRenderTypes(
             true,
             CompositeState.builder()
                 .setShaderState(ShaderStateShard(::haze))
+                .setTextureState(TextureStateShard(TEX, false, false))
                 .setTransparencyState(ADDITIVE_TRANSPARENCY)
-                .setCullState(CULL)
+                .setCullState(NO_CULL)
                 .setLightmapState(LIGHTMAP)
                 .setOverlayState(OVERLAY)
+                .setOutputState(TRANSLUCENT_TARGET)
+                .createCompositeState(true)
+        )
+
+        val METEOR_GLOW = create(
+            ClockworkMod.MOD_ID + "meteor_glow",
+            DefaultVertexFormat.NEW_ENTITY,
+            VertexFormat.Mode.QUADS,
+            BUFFER_SIZE,
+            true,
+            true,
+            CompositeState.builder()
+                .setShaderState(ShaderStateShard(::meteorGlow))
+                .setTextureState(TextureStateShard(TextureAtlas.LOCATION_BLOCKS, false, false))
+                .setTransparencyState(ADDITIVE_TRANSPARENCY)
+                .setCullState(NO_CULL)
+                .setLightmapState(LIGHTMAP)
+                .setOverlayState(NO_OVERLAY)
+                .setWriteMaskState(COLOR_WRITE)
+                .setDepthTestState(LEQUAL_DEPTH_TEST)
+                .setOutputState(MAIN_TARGET)
+                .createCompositeState(true)
+        )
+
+        val METEOR_SHIELD_DEPTH = create(
+            ClockworkMod.MOD_ID + "meteor_shield_depth",
+            DefaultVertexFormat.NEW_ENTITY,
+            VertexFormat.Mode.QUADS,
+            BUFFER_SIZE,
+            true,
+            false,
+            CompositeState.builder()
+                .setShaderState(ShaderStateShard(::meteorShieldDepth))
+                .setTextureState(TextureStateShard(TextureAtlas.LOCATION_BLOCKS, false, false))
+                .setTransparencyState(NO_TRANSPARENCY)
+                .setCullState(NO_CULL)
+                .setLightmapState(LIGHTMAP)
+                .setOverlayState(NO_OVERLAY)
+                .setWriteMaskState(DEPTH_WRITE)
+                .setDepthTestState(LEQUAL_DEPTH_TEST)
+                .createCompositeState(true)
+        )
+
+        val METEOR_HEAT_SHIELD = create(
+            ClockworkMod.MOD_ID + "meteor_heat_shield",
+            DefaultVertexFormat.NEW_ENTITY,
+            VertexFormat.Mode.QUADS,
+            BUFFER_SIZE,
+            true,
+            true,
+            CompositeState.builder()
+                .setShaderState(ShaderStateShard(::meteorHeatShield))
+                .setTextureState(TextureStateShard(TextureAtlas.LOCATION_BLOCKS, false, false))
+                .setTransparencyState(TRANSLUCENT_TRANSPARENCY)
+                .setCullState(NO_CULL)
+                .setLightmapState(NO_LIGHTMAP)
+                .setOverlayState(NO_OVERLAY)
+                .setWriteMaskState(COLOR_WRITE)
+                .createCompositeState(true)
+        )
+
+        val METEOR_PLUME = create(
+            ClockworkMod.MOD_ID + "meteor_plume",
+            DefaultVertexFormat.NEW_ENTITY,
+            VertexFormat.Mode.QUADS,
+            BUFFER_SIZE,
+            true,
+            true,
+            CompositeState.builder()
+                .setShaderState(ShaderStateShard(::meteorTrail))
+                .setTextureState(TextureStateShard(ResourceLocation("minecraft", "textures/atlas/blocks.png"), false, false))
+                .setTransparencyState(TRANSLUCENT_TRANSPARENCY)
+                .setCullState(NO_CULL)
+                .setLightmapState(NO_LIGHTMAP)
+                .setOverlayState(NO_OVERLAY)
+                .setWriteMaskState(COLOR_WRITE)
+                .setDepthTestState(LEQUAL_DEPTH_TEST)
                 .setOutputState(TRANSLUCENT_TARGET)
                 .createCompositeState(true)
         )
