@@ -18,12 +18,13 @@ import org.joml.Vector3dc
 import org.valkyrienskies.clockwork.ClockworkConfig
 import org.valkyrienskies.clockwork.ClockworkMod
 import org.valkyrienskies.clockwork.ClockworkModClient
+import org.valkyrienskies.clockwork.content.logistics.gas.IConnectable
 import org.valkyrienskies.clockwork.util.kelvin.KNodeBlockEntity
 import org.valkyrienskies.clockwork.util.kelvin.KelvinParticleHelper
 import kotlin.math.ceil
 import kotlin.math.floor
 
-class GasEngineBlockEntity(type: BlockEntityType<*>, pos: BlockPos, state: BlockState): KNodeBlockEntity(type, pos, state) {
+class GasEngineBlockEntity(type: BlockEntityType<*>, pos: BlockPos, state: BlockState): KNodeBlockEntity(type, pos, state), IConnectable {
     override fun addBehaviours(behaviours: MutableList<BlockEntityBehaviour>?) { return }
 
     val heatLoss get() = GasEngineLogic.totalEfficiencyFraction(totalEfficiency) *
@@ -39,6 +40,13 @@ class GasEngineBlockEntity(type: BlockEntityType<*>, pos: BlockPos, state: Block
     override fun lazyTick() {
         super.lazyTick()
 
+        val level = level ?: return
+        if (level.isClientSide || blockState.block !is GasEngineBlock) return
+
+        updateEngineEfficiency()
+    }
+
+    private fun updateEngineEfficiency() {
         if (level!!.isClientSide) return
         val components = GasEngineLogic.calculateEfficiencyComponents(
             level!!,

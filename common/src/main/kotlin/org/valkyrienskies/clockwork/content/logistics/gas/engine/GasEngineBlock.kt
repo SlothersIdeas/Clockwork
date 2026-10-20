@@ -10,6 +10,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.item.context.BlockPlaceContext
 import net.minecraft.world.level.BlockGetter
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.RotatedPillarBlock
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
@@ -35,6 +36,9 @@ class GasEngineBlock(properties: Properties) : RotatedPillarBlock(properties), I
     override fun onPlace(state: BlockState, level: Level, pos: BlockPos, oldState: BlockState, movedByPiston: Boolean) {
         super.onPlace(state, level, pos, oldState, movedByPiston)
         nodePlace(state, level, pos, oldState, movedByPiston)
+        if (!level.isClientSide) {
+            withBlockEntityDo(level, pos) { it.refreshConnections(level, pos) }
+        }
 
         if (level.isClientSide) return
         for (dir in Direction.entries) {
@@ -45,6 +49,21 @@ class GasEngineBlock(properties: Properties) : RotatedPillarBlock(properties), I
         }
 
 
+    }
+
+    override fun neighborChanged(
+        state: BlockState,
+        level: Level,
+        pos: BlockPos,
+        neighborBlock: Block,
+        neighborPos: BlockPos,
+        movedByPiston: Boolean
+    ) {
+        super.neighborChanged(state, level, pos, neighborBlock, neighborPos, movedByPiston)
+        if (level.isClientSide) return
+
+        val direction = Direction.fromDelta(neighborPos.x - pos.x, neighborPos.y - pos.y, neighborPos.z - pos.z) ?: return
+        withBlockEntityDo(level, pos) { it.updateConnection(level, pos, direction) }
     }
 
     override fun onRemove(state: BlockState, level: Level, pos: BlockPos, newState: BlockState, movedByPiston: Boolean) {

@@ -29,18 +29,6 @@ class ValveDuctBlockEntity(typeIn: BlockEntityType<*>, pos: BlockPos, state: Blo
      */
     var computerTarget: Double? = null
 
-    override fun lazyTick() {
-        super.lazyTick()
-
-        if (level?.isClientSide != false) return
-        if (blockState.block !is ValveDuctBlock) return
-
-        val dir = Direction.get(Direction.AxisDirection.POSITIVE, ValveDuctBlock.getDuctAxis(blockState))
-        updateConnection(level!!, blockPos, dir)
-        updateConnection(level!!, blockPos, dir.opposite)
-    }
-
-
     override fun tick() {
         super.tick()
         pointer.tickChaser()

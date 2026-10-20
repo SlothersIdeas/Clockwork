@@ -10,6 +10,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import org.valkyrienskies.clockwork.ClockworkMod
 import org.valkyrienskies.clockwork.content.logistics.gas.IConnectable
 import org.valkyrienskies.clockwork.util.ClockworkUtils
+import org.valkyrienskies.clockwork.util.DuctNetworkUtils.configureMetalDuctEdge
 import org.valkyrienskies.clockwork.util.kelvin.KNodeKineticBlockEntity
 import org.valkyrienskies.kelvin.api.DuctEdge
 import org.valkyrienskies.kelvin.api.DuctNodePos
@@ -19,18 +20,6 @@ import kotlin.math.abs
 class PumpDuctBlockEntity(typeIn: BlockEntityType<*>, pos: BlockPos, state: BlockState): KNodeKineticBlockEntity(typeIn, pos, state), IConnectable {
 
     val pumpPressure: Double get() = (abs(getSpeed()).toDouble() / 256.0) * maxPumpPressure
-
-    override fun lazyTick() {
-        super.lazyTick()
-
-        if (level?.isClientSide != false) return
-
-        val dir = blockState.getValue(BlockStateProperties.FACING)
-        updateConnection(level!!, blockPos, dir)
-        updateConnection(level!!, blockPos, dir.opposite)
-    }
-
-
 
     override fun addBehaviours(behaviours: MutableList<BlockEntityBehaviour>) {
 
@@ -54,6 +43,12 @@ class PumpDuctBlockEntity(typeIn: BlockEntityType<*>, pos: BlockPos, state: Bloc
         val facing = blockState?.getValue(BlockStateProperties.FACING) ?: Direction.UP
         if (direction == facing) return PumpDuctEdge(nodeA, nodeB, target = nodeB, pumpPressure = pumpPressure, radius = 0.3125, length = 0.375)
         return PumpDuctEdge(nodeA, nodeB, target = nodeA, pumpPressure = pumpPressure, radius = 0.3125, length = 0.375)
+    }
+
+    override fun setEdge(nodeA: DuctNodePos, nodeB: DuctNodePos, level: Level, blockPos: BlockPos, direction: Direction) {
+        val kelvin = ClockworkMod.getKelvin(level)
+        kelvin.removeEdge(nodeA, nodeB)
+        kelvin.addEdge(nodeA, nodeB, configureMetalDuctEdge(getEdge(nodeA, nodeB, level, blockPos, direction)))
     }
 
 

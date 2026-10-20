@@ -43,8 +43,6 @@ class SterlingEngineBlockEntity(type: BlockEntityType<*>, pos: BlockPos, state: 
         if (level.isClientSide) return
 
         val facing = blockState.getValue(BlockStateProperties.FACING)
-        updateConnection(level, blockPos, facing)
-        updateConnection(level, blockPos, facing.opposite)
 
         val newEfficiency = GasEngineLogic.calculateTemperatureEfficiency(
             level,
