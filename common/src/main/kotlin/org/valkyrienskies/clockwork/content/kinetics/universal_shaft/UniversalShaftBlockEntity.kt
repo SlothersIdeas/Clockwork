@@ -1,7 +1,11 @@
 package org.valkyrienskies.clockwork.content.kinetics.universal_shaft
 
+import com.simibubi.create.api.contraption.transformable.TransformableBlockEntity
+import com.simibubi.create.api.schematic.requirement.SpecialBlockEntityItemRequirement
+import com.simibubi.create.content.contraptions.StructureTransform
 import com.simibubi.create.content.kinetics.base.IRotate
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity
+import com.simibubi.create.content.schematics.requirement.ItemRequirement
 import net.minecraft.core.BlockPos
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.server.level.ServerLevel
@@ -11,6 +15,7 @@ import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
+import net.minecraft.world.phys.AABB
 import org.valkyrienskies.clockwork.ClockworkConfig
 import org.valkyrienskies.clockwork.ClockworkItems
 import org.valkyrienskies.clockwork.ClockworkSounds
@@ -18,7 +23,7 @@ import org.valkyrienskies.clockwork.util.universal_joint.IUniversalJoint
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.toWorldCoordinates
 
-class UniversalShaftBlockEntity(typeIn: BlockEntityType<*>?, pos: BlockPos?, state: BlockState?) : KineticBlockEntity(typeIn, pos, state), IUniversalJoint {
+class UniversalShaftBlockEntity(typeIn: BlockEntityType<*>?, pos: BlockPos?, state: BlockState?) : KineticBlockEntity(typeIn, pos, state), IUniversalJoint, SpecialBlockEntityItemRequirement {
     override var connectedJoint: IUniversalJoint? = null
     override var pos = blockPos
     var connectedPos: BlockPos? = null
@@ -42,6 +47,13 @@ class UniversalShaftBlockEntity(typeIn: BlockEntityType<*>?, pos: BlockPos?, sta
         val facingFrom = stateFrom.getValue(BlockStateProperties.FACING)
         val facingTo = stateTo.getValue(BlockStateProperties.FACING)
         return -facingFrom.axisDirection.step.toFloat() * facingTo.axisDirection.step.toFloat()
+    }
+
+    override fun getRenderBoundingBox(): AABB? {
+        val aabb = AABB(this.worldPosition)
+        if (connectedPos == null) return aabb
+        // Yes this is a stupid way to do it but its what Create does so sue me
+        return aabb.inflate(maxCreationDistance);
     }
 
     override fun addPropagationLocations(
@@ -94,6 +106,7 @@ class UniversalShaftBlockEntity(typeIn: BlockEntityType<*>?, pos: BlockPos?, sta
         if (other is UniversalShaftBlockEntity) {
             other.connectedBe = this
             other.connectedPos = this.pos
+
             other.connectedJoint = this
             other.main = false
             other.attachKinetics()
@@ -106,7 +119,9 @@ class UniversalShaftBlockEntity(typeIn: BlockEntityType<*>?, pos: BlockPos?, sta
 
         if ((connectedJoint == null || connectedBe == null) && connectedPos != null) {
             val be = level!!.getBlockEntity(connectedPos!!)
-            if (be != null && be !is UniversalShaftBlockEntity) connectedPos = null
+            if (be != null && be !is UniversalShaftBlockEntity) {
+                connectedPos = null
+            }
             else if(be != null) {
                 connectedJoint = be
                 connectedBe = be
@@ -136,9 +151,10 @@ class UniversalShaftBlockEntity(typeIn: BlockEntityType<*>?, pos: BlockPos?, sta
 
     override fun write(compound: CompoundTag, clientPacket: Boolean) {
         if (connectedPos != null) {
-            compound.putInt("otherPosX",connectedPos!!.x)
-            compound.putInt("otherPosY",connectedPos!!.y)
-            compound.putInt("otherPosZ",connectedPos!!.z)
+            val offset = connectedPos!!.subtract(worldPosition)
+            compound.putInt("otherPosXr",offset.x)
+            compound.putInt("otherPosYr",offset.y)
+            compound.putInt("otherPosZr",offset.z)
             compound.putBoolean("main", main)
 
             // Used for onPaste
@@ -152,8 +168,15 @@ class UniversalShaftBlockEntity(typeIn: BlockEntityType<*>?, pos: BlockPos?, sta
     }
 
     override fun read(compound: CompoundTag, clientPacket: Boolean) {
+        // Old serialization
         if (compound.contains("otherPosX")) {
             connectedPos = BlockPos(compound.getInt("otherPosX"),compound.getInt("otherPosY"),compound.getInt("otherPosZ"))
+            main = compound.getBoolean("main")
+        }
+        // New serialization
+        else if (compound.contains("otherPosXr")) {
+            val offset = BlockPos(compound.getInt("otherPosXr"),compound.getInt("otherPosYr"),compound.getInt("otherPosZr"))
+            connectedPos = worldPosition.offset(offset)
             main = compound.getBoolean("main")
         } else {
             connectedPos = null
@@ -164,6 +187,12 @@ class UniversalShaftBlockEntity(typeIn: BlockEntityType<*>?, pos: BlockPos?, sta
         }
 
         super.read(compound, clientPacket)
+    }
+
+    override fun getRequiredItems(state: BlockState?): ItemRequirement? {
+        return if (connectedPos != null && main)
+            ItemRequirement(ItemRequirement.ItemUseType.CONSUME, ClockworkItems.UNIVERSAL_SHAFT_ITEM.asStack())
+        else ItemRequirement.NONE
     }
 
     override fun remove() {

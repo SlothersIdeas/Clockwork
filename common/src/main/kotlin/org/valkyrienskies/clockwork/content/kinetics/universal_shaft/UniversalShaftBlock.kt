@@ -81,7 +81,19 @@ class UniversalShaftBlock(properties: Properties?) : DirectionalKineticBlock(pro
         shipsBeingCopied: List<ServerShip>,
         centerPositions: Map<Long, Vector3dc>
     ): CompoundTag? {
-        return null
+        val be = be as? UniversalShaftBlockEntity ?: return null
+        val tag = CompoundTag()
+        be.saveAdditional(tag)
+
+        // Save the absolute position because it's easier to deal with in onPaste than the relative one
+        // (We use a relative position everywhere else for create schematics)
+        val offset = BlockPos(tag.getInt("otherPosXr"),tag.getInt("otherPosYr"),tag.getInt("otherPosZr"))
+        val actualPos = be.pos.offset(offset)
+        tag.putInt("otherPosXa", actualPos.x)
+        tag.putInt("otherPosYa", actualPos.y)
+        tag.putInt("otherPosZa", actualPos.z)
+
+        return tag
     }
 
     override fun onPaste(
@@ -92,19 +104,21 @@ class UniversalShaftBlock(properties: Properties?) : DirectionalKineticBlock(pro
         centerPositions: Map<Long, Pair<Vector3dc, Vector3dc>>,
         tag: CompoundTag?
     ): CompoundTag? {
-        if (!(tag?.contains("otherPosX") ?: false)) return tag
+        if (!(tag?.contains("otherPosXa") ?: false)) return tag
         if (!(tag.contains("otherShipId"))) return tag
 
-        val connectedPos = BlockPos(tag.getInt("otherPosX"),tag.getInt("otherPosY"),tag.getInt("otherPosZ"))
+        val connectedPos = BlockPos(tag.getInt("otherPosXa"),tag.getInt("otherPosYa"),tag.getInt("otherPosZa"))
         val oldId = tag.getLong("otherShipId")
 
         val offset = connectedPos.center.toJOML().sub(centerPositions[oldId]?.first ?: return tag)
         val newCenter = centerPositions[oldId]?.second?.add(offset, Vector3d()) ?: return tag
 
         val newPos = BlockPos.containing(newCenter.toMinecraft())
-        tag.putInt("otherPosX", newPos.x)
-        tag.putInt("otherPosY", newPos.y)
-        tag.putInt("otherPosZ", newPos.z)
+
+        val newOffset = newPos!!.subtract(pos)
+        tag.putInt("otherPosXr",newOffset.x)
+        tag.putInt("otherPosYr",newOffset.y)
+        tag.putInt("otherPosZr",newOffset.z)
 
         return tag
     }
