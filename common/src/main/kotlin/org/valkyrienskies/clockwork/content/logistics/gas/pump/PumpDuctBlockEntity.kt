@@ -2,19 +2,14 @@ package org.valkyrienskies.clockwork.content.logistics.gas.pump
 
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour
 import net.minecraft.core.BlockPos
-import net.minecraft.core.Direction
-import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import org.valkyrienskies.clockwork.ClockworkMod
 import org.valkyrienskies.clockwork.content.logistics.gas.IConnectable
 import org.valkyrienskies.clockwork.util.ClockworkUtils
-import org.valkyrienskies.clockwork.util.DuctNetworkUtils.configureMetalDuctEdge
 import org.valkyrienskies.clockwork.util.kelvin.KNodeKineticBlockEntity
-import org.valkyrienskies.kelvin.api.DuctEdge
-import org.valkyrienskies.kelvin.api.DuctNodePos
-import org.valkyrienskies.kelvin.api.edges.PumpDuctEdge
+import org.valkyrienskies.kelvin.api.nodes.PumpDuctNode
 import kotlin.math.abs
 
 class PumpDuctBlockEntity(typeIn: BlockEntityType<*>, pos: BlockPos, state: BlockState): KNodeKineticBlockEntity(typeIn, pos, state), IConnectable {
@@ -26,29 +21,23 @@ class PumpDuctBlockEntity(typeIn: BlockEntityType<*>, pos: BlockPos, state: Bloc
         super.addBehavioursDeferred(behaviours)
     }
 
+    override fun lazyTick() {
+        super.lazyTick()
+        updatePumpNode()
+    }
+
     override fun onSpeedChanged(previousSpeed: Float) {
         super.onSpeedChanged(previousSpeed)
-
-        val front = blockPos.relative(blockState.getValue(BlockStateProperties.FACING))
-        val back = blockPos.relative(blockState.getValue(BlockStateProperties.FACING).opposite)
-        if (level == null) return
-        val backEdge = ClockworkMod.getKelvin(level).getEdgeBetween(getDuctNodePosition(), ClockworkUtils.getDuctNodePos(back, level))
-        val frontEdge = ClockworkMod.getKelvin(level).getEdgeBetween(getDuctNodePosition(), ClockworkUtils.getDuctNodePos(front, level))
-
-        (backEdge as? PumpDuctEdge)?.pumpPressure = pumpPressure
-        (frontEdge as? PumpDuctEdge)?.pumpPressure = pumpPressure
+        updatePumpNode()
     }
 
-    override fun getEdge(nodeA: DuctNodePos, nodeB: DuctNodePos, level: Level, blockPos: BlockPos, direction: Direction): DuctEdge {
-        val facing = blockState?.getValue(BlockStateProperties.FACING) ?: Direction.UP
-        if (direction == facing) return PumpDuctEdge(nodeA, nodeB, target = nodeB, pumpPressure = pumpPressure, radius = 0.3125, length = 0.375)
-        return PumpDuctEdge(nodeA, nodeB, target = nodeA, pumpPressure = pumpPressure, radius = 0.3125, length = 0.375)
-    }
-
-    override fun setEdge(nodeA: DuctNodePos, nodeB: DuctNodePos, level: Level, blockPos: BlockPos, direction: Direction) {
-        val kelvin = ClockworkMod.getKelvin(level)
-        kelvin.removeEdge(nodeA, nodeB)
-        kelvin.addEdge(nodeA, nodeB, configureMetalDuctEdge(getEdge(nodeA, nodeB, level, blockPos, direction)))
+    fun updatePumpNode() {
+        val level = level ?: return
+        if (level.isClientSide) return
+        val node = ClockworkMod.getKelvin(level).getNodeAt(getDuctNodePosition()) as? PumpDuctNode ?: return
+        val outlet = blockPos.relative(blockState.getValue(BlockStateProperties.FACING))
+        node.pumpTarget = ClockworkUtils.getDuctNodePos(outlet, level)
+        node.pumpPressure = pumpPressure
     }
 
 
