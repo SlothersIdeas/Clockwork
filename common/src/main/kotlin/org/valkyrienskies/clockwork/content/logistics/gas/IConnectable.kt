@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.world.level.Level
 import org.valkyrienskies.clockwork.ClockworkMod
+import org.valkyrienskies.clockwork.content.logistics.gas.duct.DuctBlock
 import org.valkyrienskies.clockwork.util.DuctNetworkUtils.configureMetalDuctEdge
 import org.valkyrienskies.kelvin.api.DuctEdge
 import org.valkyrienskies.kelvin.api.DuctNode
@@ -28,6 +29,16 @@ interface IConnectable: INodeBlockEntity {
         val neighborBlock = neighborState.block
 
         val selfBlock = level.getBlockState(blockPos).block as? INodeBlock ?: return
+
+        if (neighborBlock is DuctBlock) {
+            if (!neighborBlock.canConnectTo(neighbor, blockPos, direction.opposite, level)) return
+            if (!selfBlock.canConnectTo(blockPos, neighbor, direction, level)) return
+            if (level.isClientSide) return
+
+            val connectedState = neighborBlock.getConnectedState(level, neighborState, neighbor) ?: return
+            if (connectedState != neighborState) level.setBlockAndUpdate(neighbor, connectedState)
+            return
+        }
 
         if (neighborBlock !is INodeBlock) return
         val neighborNodeBlock = neighborBlock as INodeBlock
