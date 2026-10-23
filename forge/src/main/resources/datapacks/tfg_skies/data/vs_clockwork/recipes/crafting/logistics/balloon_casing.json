@@ -13,6 +13,12 @@
       "tag": "forge:cloth"
     }
   },
+  "conditions": [
+    {
+      "type": "forge:mod_loaded",
+      "modid": "tfg"
+    }
+  ],
   "result": {
     "count": 12,
     "item": "vs_clockwork:balloon_casing"
