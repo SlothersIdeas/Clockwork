@@ -2,27 +2,27 @@
   "type": "minecraft:crafting_shaped",
   "pattern": [
     "W",
-    "C",
+    "A",
     "S"
   ],
   "key": {
     "W": {
       "tag": "minecraft:wooden_slabs"
     },
-    "C": {
-      "item": "create:brass_casing"
+    "A": {
+      "item": "create:andesite_casing"
     },
     "S": {
       "item": "greate:andesite_alloy_shaft"
     }
   },
   "result": {
-    "item": "vs_clockwork:blade_controller"
+    "item": "vs_clockwork:juryrigged_propeller_bearing"
   },
   "conditions": [
     {
       "type": "forge:mod_loaded",
-      "modid": "tfc"
+      "modid": "tfg"
     }
   ]
 }

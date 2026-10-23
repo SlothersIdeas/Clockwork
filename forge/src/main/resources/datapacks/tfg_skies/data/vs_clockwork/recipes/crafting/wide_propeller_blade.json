@@ -1,25 +1,26 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "SCS",
-    "CSC",
-    "SCS"
+    "W",
+    "W",
+    "C"
   ],
   "key": {
-    "S": {
-      "item": "minecraft:sugar"
+    "W": {
+      "tag": "tfc:lumber"
     },
     "C": {
-      "tag": "forge:cloth"
+      "item": "gtceu:small_iron_gear"
     }
   },
   "result": {
-    "item": "vs_clockwork:sugar_rocket"
+    "item": "vs_clockwork:wide_propeller_blade",
+    "count": 8
   },
   "conditions": [
     {
       "type": "forge:mod_loaded",
-      "modid": "tfc"
+      "modid": "tfg"
     }
   ]
 }

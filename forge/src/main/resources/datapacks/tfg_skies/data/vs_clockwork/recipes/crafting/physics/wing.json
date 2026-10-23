@@ -1,26 +1,25 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "W",
-    "W",
-    "C"
+    "CB",
+    "BC"
   ],
   "key": {
-    "W": {
-      "tag": "tfc:lumber"
-    },
     "C": {
-      "item": "gtceu:small_iron_gear"
+      "tag": "forge:cloth"
+    },
+    "B": {
+      "tag": "forge:nuggets/brass"
     }
   },
   "result": {
-    "item": "vs_clockwork:wide_propeller_blade",
+    "item": "vs_clockwork:wing",
     "count": 8
   },
   "conditions": [
     {
       "type": "forge:mod_loaded",
-      "modid": "tfc"
+      "modid": "tfg"
     }
   ]
 }

@@ -23,7 +23,7 @@
   "conditions": [
     {
       "type": "forge:mod_loaded",
-      "modid": "tfc"
+      "modid": "tfg"
     },
     {
       "type": "forge:mod_loaded",
