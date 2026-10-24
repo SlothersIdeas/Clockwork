@@ -56,7 +56,13 @@ class DuctTankBlock(properties: Properties) : Block(properties), INodeBlock, IBE
 
     override fun nodeRemove(state: BlockState, level: Level, pos: BlockPos, newState: BlockState, isMoving: Boolean) {
         if (!level.isClientSide) {
-            ClockworkMod.getKelvin(level).removeNode(pos.toDuctNodePos(level.dimension().location()))
+            val kelvin = ClockworkMod.getKelvin(level)
+            val nodePos = pos.toDuctNodePos(level.dimension().location())
+            // Kelvin removes the node without removing its edges. Retire the old
+            // connections so a split cannot leave ducts linked to the former controller.
+            val connections = kelvin.edges.keys.filter { it.first == nodePos || it.second == nodePos }
+            for ((nodeA, nodeB) in connections) kelvin.removeEdge(nodeA, nodeB)
+            kelvin.removeNode(nodePos)
         } else {
             ClockworkModClient.getKelvin().removeNode(pos.toDuctNodePos(level.dimension().location()))
         }
@@ -79,6 +85,7 @@ class DuctTankBlock(properties: Properties) : Block(properties), INodeBlock, IBE
     override fun onRemove(state: BlockState, level: Level, pos: BlockPos, newState: BlockState, isMoving: Boolean) {
         if (state.hasBlockEntity() && (state.block !== newState.block || !newState.hasBlockEntity())) {
             val blockEntity = level.getBlockEntity(pos) as? DuctTankBlockEntity ?: return
+            nodeRemove(state, level, pos, newState, isMoving)
             level.removeBlockEntity(pos)
             ConnectivityHandler.splitMulti(blockEntity)
         }

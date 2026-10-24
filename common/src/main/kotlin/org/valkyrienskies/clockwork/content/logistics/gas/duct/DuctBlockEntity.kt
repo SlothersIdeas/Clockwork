@@ -41,7 +41,8 @@ class DuctBlockEntity(type: BlockEntityType<*>, pos: BlockPos, state: BlockState
         val level = level ?: return
         if (level.isClientSide || !shouldUpdateEdges) return
 
-        // Recreate saved edges using the same direction rule as newly configured edges.
+        // Recreate loaded or invalidated edges using the current neighbor controller
+        // and the same direction rule as newly configured edges.
         (blockState.block as? DuctBlock)?.getConnectedState(level, blockState, blockPos)
         shouldUpdateEdges = false
     }

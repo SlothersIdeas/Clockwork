@@ -10,7 +10,9 @@ import net.minecraft.nbt.NbtUtils
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.BlockState
+import org.valkyrienskies.clockwork.content.logistics.gas.duct.DuctBlockEntity
 import org.valkyrienskies.clockwork.util.kelvin.KNodeBlockEntity
+import org.valkyrienskies.clockwork.util.kelvin.KNodeKineticBlockEntity
 import org.valkyrienskies.kelvin.api.DuctNodePos
 import org.valkyrienskies.kelvin.util.KelvinExtensions.toDuctNodePos
 
@@ -91,6 +93,18 @@ class DuctTankBlockEntity(type: BlockEntityType<*>, pos: BlockPos, state: BlockS
             (blockState.block as? DuctTankBlock)?.nodeRemove(blockState, level!!, blockPos, blockState, false)
             if (isController) {
                 (blockState.block as? DuctTankBlock)?.nodePlace(blockState, level!!, blockPos, blockState, false)
+            }
+
+            if (!level!!.isClientSide) {
+                // Every member can have ducts attached. Defer rebuilding their edges until
+                // formation/splitting has finished assigning controllers and replacing nodes.
+                for (direction in Direction.entries) {
+                    when (val neighbor = level!!.getBlockEntity(blockPos.relative(direction))) {
+                        is DuctBlockEntity -> neighbor.shouldUpdateEdges = true
+                        is KNodeBlockEntity -> neighbor.queueConnectionRefresh()
+                        is KNodeKineticBlockEntity -> neighbor.queueConnectionRefresh()
+                    }
+                }
             }
         }
 

@@ -67,6 +67,10 @@ abstract class KNodeBlockEntity(type: BlockEntityType<*>?, pos: BlockPos, state:
         super.setLazyTickRate(ClockworkConfig.KELVIN.kelvinNodeBlockEntityLazyTickRate)
     }
 
+    fun queueConnectionRefresh() {
+        refreshConnectionsPending = true
+    }
+
     private fun refreshConnectionsIfReady() {
         if (!refreshConnectionsPending) return
 
