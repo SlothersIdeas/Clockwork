@@ -85,9 +85,11 @@ class DuctTankBlock(properties: Properties) : Block(properties), INodeBlock, IBE
     override fun onRemove(state: BlockState, level: Level, pos: BlockPos, newState: BlockState, isMoving: Boolean) {
         if (state.hasBlockEntity() && (state.block !== newState.block || !newState.hasBlockEntity())) {
             val blockEntity = level.getBlockEntity(pos) as? DuctTankBlockEntity ?: return
-            nodeRemove(state, level, pos, newState, isMoving)
-            level.removeBlockEntity(pos)
-            ConnectivityHandler.splitMulti(blockEntity)
+            blockEntity.preserveContents {
+                nodeRemove(state, level, pos, newState, isMoving)
+                level.removeBlockEntity(pos)
+                ConnectivityHandler.splitMulti(blockEntity)
+            }
         }
     }
 
